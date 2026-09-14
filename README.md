@@ -25,9 +25,9 @@ Values expire 15 s after the plugin stops refreshing them. `$agents` is read fro
 
 ### Claude Code statusline snapshot
 
-Only the input of Claude Code's statusline command carries effort and context use, so the statusline has to hand them over. Add this to your statusline script, after it has read its input into `$input`:
+Only the input of Claude Code's statusline command carries effort and context use, so the statusline has to hand them over. Add this to your statusline script, after it has read its input into `$input`. It needs Bash (`[[ =~ ]]`, here-strings) and `jq`; a POSIX `sh` script such as one run by dash rejects it:
 
-```sh
+```bash
 sid=$(jq -r '.session_id // empty' <<<"$input")
 if [[ "$sid" =~ ^[0-9a-fA-F-]{36}$ ]]; then
     snap="${XDG_CACHE_HOME:-$HOME/.cache}/herdr-bg-activity/sessions"
