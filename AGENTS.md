@@ -4,7 +4,7 @@ Last updated: 2026-09-14
 
 ## Overview
 
-A herdr plugin that marks agent panes idle at the prompt while a monitor or background shell still runs (herdrdev/herdr#1217). User-facing documentation is in `README.md`.
+A herdr plugin that marks agent panes idle at the prompt while a monitor or background shell still runs (herdrdev/herdr#1217). For installation, tokens and sidebar configuration see `README.md`.
 
 ## Setup
 
