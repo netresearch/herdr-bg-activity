@@ -24,7 +24,7 @@ import socket
 import sys
 import time
 
-SOURCE = "local.bg-activity"
+SOURCE = "netresearch.bg-activity"
 POLL_SECONDS = 2.0
 REFRESH_SECONDS = 5.0
 TTL_MS = 15_000

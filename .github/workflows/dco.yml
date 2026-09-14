@@ -1,0 +1,14 @@
+name: DCO
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions: {}
+
+jobs:
+  dco:
+    uses: netresearch/.github/.github/workflows/dco.yml@main
+    permissions:
+      contents: read
+      pull-requests: read

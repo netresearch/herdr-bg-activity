@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions: {}
+
+jobs:
+  python-ci:
+    uses: netresearch/.github/.github/workflows/python-ci.yml@main
+    permissions:
+      contents: read
+    with:
+      os-versions: '["ubuntu-latest","macos-latest"]'
+      python-versions: '["3.10","3.14"]'
+      cache: ""
+      install-cmd: "python -m pip install --upgrade pip && pip install ruff"
+      lint-cmd: "ruff check --no-fix . && ruff format --check ."
+      test-cmd: "python -m unittest discover -s tests -v"

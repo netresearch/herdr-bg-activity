@@ -1,6 +1,6 @@
 # herdr-bg-activity
 
-A local [herdr](https://herdr.dev) plugin. herdr shows a Claude Code pane as `idle` as soon as its turn ends, even while a monitor or background shell it started is still running ([herdr#1217](https://github.com/herdrdev/herdr/issues/1217)). This plugin reads the footer Claude Code renders below its prompt box and publishes display metadata, so the sidebar can tell "ready, but background work running" from "nothing running".
+A [herdr](https://herdr.dev) plugin. herdr shows a Claude Code pane as `idle` as soon as its turn ends, even while a monitor or background shell it started is still running ([herdr#1217](https://github.com/herdrdev/herdr/issues/1217)). This plugin reads the footer Claude Code renders below its prompt box and publishes display metadata, so the sidebar can tell "ready, but background work running" from "nothing running".
 
 The footer format (`⏵⏵ auto mode on · 1 monitor · ← 1 agent`) belongs to Claude Code and was captured on 2.1.270; if a Claude Code update renames it, the tokens simply stop appearing.
 
@@ -16,11 +16,18 @@ It changes presentation only. The state icon, waits and notifications still foll
 
 Values expire 15 s after the plugin stops refreshing them.
 
-## Setup
+## Requirements
+
+- herdr 0.9.0 or later, Linux or macOS
+- `python3` (3.10+) on the herdr server's `PATH`; standard library only
+
+## Install
 
 ```sh
-herdr plugin link ~/p/herdr-bg-activity/main
+herdr plugin install netresearch/herdr-bg-activity
 ```
+
+herdr starts plugins when the server restores a session, so the plugin runs after the next `herdr server stop` and restart.
 
 Add the tokens to `~/.config/herdr/config.toml`:
 
@@ -38,17 +45,22 @@ rows = [
 ]
 ```
 
-herdr starts the plugin when the server restores a session. To start it without restarting the server:
+A file lock next to the herdr socket keeps one instance per session; a new instance waits until the previous one exits.
+
+## Development
 
 ```sh
-cd ~/p/herdr-bg-activity/main
-HERDR_SOCKET_PATH=~/.config/herdr/herdr.sock setsid /usr/bin/python3 herdr_bg_activity.py >/dev/null 2>&1 &
+herdr plugin link .
+python3 -m unittest discover -s tests
+ruff format --check . && ruff check .
 ```
 
-A file lock keeps a single instance; a later startup instance waits until the running one exits.
-
-## Tests
+To run a working copy against a live server without restarting it:
 
 ```sh
-/usr/bin/python3 -m unittest discover -s tests
+HERDR_SOCKET_PATH=~/.config/herdr/herdr.sock python3 herdr_bg_activity.py
 ```
+
+## License
+
+MIT, see [LICENSE](LICENSE).
