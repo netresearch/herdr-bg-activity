@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Mark herdr agents that sit at the prompt while background work still runs.
 
 herdr knows five agent states. A Claude Code pane whose turn has ended but
