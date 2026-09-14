@@ -178,7 +178,15 @@ def main() -> int:
     fcntl.flock(lock, fcntl.LOCK_EX)
 
     herdr = Herdr(socket_path)
-    publisher = Publisher(herdr)
+    return run(herdr, Publisher(herdr))
+
+
+def run(herdr: Herdr, publisher: Publisher, sleep=time.sleep) -> int:
+    """Poll until herdr stays unreachable; any other failure only skips a tick.
+
+    A crash would remove the markers until the next server start without any
+    visible sign, so unexpected response shapes are logged and retried.
+    """
     failures = 0
     last_error = None
     while True:
@@ -190,11 +198,12 @@ def main() -> int:
             if failures >= MAX_CONNECT_FAILURES:
                 print(f"herdr unreachable, exiting: {exc}", file=sys.stderr)
                 return 0
-        except (HerdrError, KeyError, ValueError) as exc:
-            if str(exc) != last_error:
-                print(f"tick failed: {exc}", file=sys.stderr)
-                last_error = str(exc)
-        time.sleep(POLL_SECONDS)
+        except Exception as exc:  # noqa: BLE001 - a crash would hide the markers silently
+            message = f"{type(exc).__name__}: {exc}"
+            if message != last_error:
+                print(f"tick failed: {message}", file=sys.stderr)
+                last_error = message
+        sleep(POLL_SECONDS)
 
 
 if __name__ == "__main__":
