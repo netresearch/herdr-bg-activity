@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-14
+
+### Added
+
+- Session details for Claude Code panes as agent-row tokens: `$model` (model abbreviation such as `O5`, `F51`, `H45`), `$effort` (a bar per effort level, `▁` low to `█` max), `$agents` (running subagents listed below Claude Code's footer, `↳2`), `$ctx` / `$ctx_warn` / `$ctx_crit` (context use, one key per threshold at 70 % and 90 %, so each can carry its own colour) and `$rc` (`⇄` while a live Claude Code process of the session is registered for Remote Control).
+- Model, effort and context use come from a per-session snapshot the Claude Code statusline command writes to `${XDG_CACHE_HOME:-~/.cache}/herdr-bg-activity/sessions/<session_id>.json`; the README documents the Bash snippet and a sidebar configuration with colours. Without the snapshot those tokens stay empty.
+
+### Changed
+
+- Claude Code panes are read in every agent state, because the subagent list is shown while the agent works. The `$bg` marker is still computed only for idle and done panes.
+
 ## [0.1.0] - 2026-09-14
 
 First release.
@@ -16,5 +27,6 @@ First release.
 - The poller keeps running through unexpected API responses and panes that close mid-poll, treats only `pane_not_found` / `workspace_not_found` as a vanished target, and exits after repeated connection failures.
 - Requires herdr 0.9.0 or later and `python3` 3.10+ on Linux or macOS; standard library only.
 
-[Unreleased]: https://github.com/netresearch/herdr-bg-activity/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/netresearch/herdr-bg-activity/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/netresearch/herdr-bg-activity/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/netresearch/herdr-bg-activity/releases/tag/v0.1.0
