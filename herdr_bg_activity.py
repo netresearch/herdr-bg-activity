@@ -16,11 +16,13 @@ Semantic state, waits and notifications stay untouched.
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import os
 import re
 import socket
 import sys
+import tempfile
 import time
 
 SOURCE = "netresearch.bg-activity"
@@ -171,6 +173,25 @@ def tick(herdr: Herdr, publisher: Publisher) -> None:
         )
 
 
+def lock_path(socket_path: str) -> str:
+    """Per-user, per-session lock file outside herdr's own directories.
+
+    Named after the socket so a herdr-started and a hand-started instance for
+    the same session meet on the same file.
+    """
+    base = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
+    digest = hashlib.sha256(os.path.realpath(socket_path).encode()).hexdigest()[:16]
+    return os.path.join(base, f"herdr-bg-activity-{os.getuid()}-{digest}.lock")
+
+
+def acquire_lock(path: str) -> int:
+    """Block until the lock is ours. The temp directory may be shared, so the
+    file is private and a planted symlink is refused."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    return fd
+
+
 def main() -> int:
     socket_path = os.environ.get("HERDR_SOCKET_PATH")
     if not socket_path:
@@ -179,11 +200,8 @@ def main() -> int:
 
     # One instance per herdr session. A server restart starts a new instance
     # while the previous one is still counting its connection failures, so wait
-    # for the lock instead of giving up. The lock sits next to the socket, not
-    # in HERDR_PLUGIN_STATE_DIR, so a hand-started instance shares it too.
-    lock_path = os.path.join(os.path.dirname(socket_path), "bg-activity.lock")
-    lock = open(lock_path, "w")  # noqa: SIM115
-    fcntl.flock(lock, fcntl.LOCK_EX)
+    # for the lock instead of giving up.
+    lock = acquire_lock(lock_path(socket_path))  # noqa: F841 - held until exit
 
     herdr = Herdr(socket_path)
     return run(herdr, Publisher(herdr))

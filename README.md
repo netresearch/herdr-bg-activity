@@ -45,7 +45,7 @@ rows = [
 ]
 ```
 
-A file lock next to the herdr socket keeps one instance per session; a new instance waits until the previous one exits.
+A file lock in `$XDG_RUNTIME_DIR` (or the temp directory) keeps one instance per herdr session; a new instance waits until the previous one exits.
 
 ## Development
 
