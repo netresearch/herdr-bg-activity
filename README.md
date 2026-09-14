@@ -49,6 +49,15 @@ rows = [
 
 A file lock in `$XDG_RUNTIME_DIR` (or the temp directory) keeps one instance per herdr session; a new instance waits until the previous one exits.
 
+## Verify a release download
+
+Each GitHub Release carries the tagged source archive, `SHA256SUMS.txt`, and SLSA build provenance for both:
+
+```sh
+gh attestation verify herdr-bg-activity-vX.Y.Z.tar.gz --repo netresearch/herdr-bg-activity
+sha256sum --check SHA256SUMS.txt
+```
+
 ## Development
 
 ```sh
