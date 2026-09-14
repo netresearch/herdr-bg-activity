@@ -1,5 +1,7 @@
 # herdr-bg-activity
 
+[![CI](https://github.com/netresearch/herdr-bg-activity/actions/workflows/ci.yml/badge.svg)](https://github.com/netresearch/herdr-bg-activity/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/github/license/netresearch/herdr-bg-activity)](LICENSE)
+
 A [herdr](https://herdr.dev) plugin. herdr shows a Claude Code pane as `idle` as soon as its turn ends, even while a monitor or background shell it started is still running ([herdr#1217](https://github.com/herdrdev/herdr/issues/1217)). This plugin reads the footer Claude Code renders below its prompt box and publishes display metadata, so the sidebar can tell "ready, but background work running" from "nothing running".
 
 The footer format (`⏵⏵ auto mode on · 1 monitor · ← 1 agent`) belongs to Claude Code and was captured on 2.1.270; if a Claude Code update renames it, the tokens simply stop appearing.
