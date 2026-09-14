@@ -130,18 +130,26 @@ def tick(herdr: Herdr, publisher: Publisher) -> None:
     pane_bg: dict[str, str | None] = {}
     ws_names: dict[str, set[str]] = {}
     ws_count: dict[str, int] = {}
+    skipped_panes: set[str] = set()
+    skipped_workspaces: set[str] = set()
     for agent in agents:
         pane, ws = agent["pane_id"], agent["workspace_id"]
         if agent.get("agent"):
             ws_names.setdefault(ws, set()).add(agent["agent"])
         counts: dict[str, int] = {}
         if agent.get("agent_status") in QUIET_STATES:
-            read = herdr.call("pane.read", {"pane_id": pane, "source": "detection"})
+            try:
+                read = herdr.call("pane.read", {"pane_id": pane, "source": "detection"})
+            except HerdrError:
+                # Closed since agent.list: leave its tokens alone for this tick.
+                skipped_panes.add(pane)
+                skipped_workspaces.add(ws)
+                continue
             counts = background_counts(read["read"]["text"])
         pane_bg[pane] = describe(counts)
         ws_count[ws] = ws_count.get(ws, 0) + sum(counts.values())
 
-    for pane in publisher.targets("pane") - pane_bg.keys():
+    for pane in publisher.targets("pane") - pane_bg.keys() - skipped_panes:
         pane_bg[pane] = None
     for pane, value in pane_bg.items():
         publisher.publish("pane", pane, {"bg": value}, now)
@@ -149,7 +157,7 @@ def tick(herdr: Herdr, publisher: Publisher) -> None:
     workspaces = {
         w["workspace_id"] for w in herdr.call("workspace.list", {})["workspaces"]
     }
-    for ws in workspaces | publisher.targets("workspace"):
+    for ws in (workspaces | publisher.targets("workspace")) - skipped_workspaces:
         names = ws_names.get(ws)
         count = ws_count.get(ws, 0)
         publisher.publish(
