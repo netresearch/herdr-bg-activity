@@ -15,8 +15,35 @@ It changes presentation only. The state icon, waits and notifications still foll
 | Agent row | `$bg` | `⧗ 1 monitor, 2 shells` |
 | Space row | `$bg` | `⧗ 3` |
 | Space row | `$cmd` | `claude` |
+| Agent row | `$model` | `O5` (claude-opus-5), `F51`, `H45` |
+| Agent row | `$effort` | `▁` low, `▃` medium, `▅` high, `▇` xhigh, `█` max |
+| Agent row | `$agents` | `↳2` running subagents |
+| Agent row | `$ctx`, `$ctx_warn`, `$ctx_crit` | `67%` context used; below 70 %, from 70 %, from 90 % |
+| Agent row | `$rc` | `⇄` while the session is registered for Remote Control |
 
-Values expire 15 s after the plugin stops refreshing them.
+Values expire 15 s after the plugin stops refreshing them. `$agents` is read from the list of running subagents Claude Code shows below its footer. `$rc` comes from Claude Code's per-process files in `~/.claude/sessions/` (or `$CLAUDE_CONFIG_DIR/sessions/`): a live process whose file carries a `bridgeSessionId`. Whether that registration is currently connected is not recorded there. `$model`, `$effort` and the context tokens need the statusline snapshot described below; without it they stay empty.
+
+### Claude Code statusline snapshot
+
+Only the input of Claude Code's statusline command carries effort and context use, so the statusline has to hand them over. Add this to your statusline script, after it has read its input into `$input`:
+
+```sh
+sid=$(jq -r '.session_id // empty' <<<"$input")
+if [[ "$sid" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+    snap="${XDG_CACHE_HOME:-$HOME/.cache}/herdr-bg-activity/sessions"
+    if (umask 077 && mkdir -p "$snap") 2>/dev/null && tmp=$(mktemp "$snap/.$sid.XXXXXX" 2>/dev/null); then
+        if jq -c '{session_id, model: {id: .model.id}, effort: {level: .effort.level},
+                   context_window: {used_percentage: .context_window.used_percentage}}' <<<"$input" >"$tmp" 2>/dev/null; then
+            mv -f "$tmp" "$snap/$sid.json"
+        else
+            rm -f "$tmp"
+        fi
+    fi
+    find "$snap" -maxdepth 1 -name '*.json' -mtime +7 -delete 2>/dev/null
+fi
+```
+
+The plugin reads `<session_id>.json` for each Claude Code pane, using the session id herdr reports for it. The statusline runs when Claude Code redraws it, so a snapshot is as fresh as the session's last activity.
 
 ## Requirements
 
@@ -37,7 +64,25 @@ Add the tokens to `~/.config/herdr/config.toml`:
 [ui.sidebar.agents]
 rows = [
   ["state_icon", "terminal_title_stripped"],
-  ["agent", { token = "$bg", fg = "#fabd2f" }],
+  [
+    "agent",
+    "$model",
+    # Effort colours follow Claude Code's /effort picker (dark theme); max has no
+    # static colour there, so it gets Claude's accent colour.
+    { token = "$effort", rules = [
+      { equals = "▁", fg = "#ffc107" },
+      { equals = "▃", fg = "#4eba65" },
+      { equals = "▅", fg = "#b1b9f9" },
+      { equals = "▇", fg = "#af87ff" },
+      { equals = "█", fg = "#d77757" },
+    ] },
+    "$agents",
+    "$ctx",
+    { token = "$ctx_warn", fg = "#fabd2f" },
+    { token = "$ctx_crit", fg = "#fb4934" },
+    { token = "$rc", fg = "#b8bb26" },
+    { token = "$bg", fg = "#fabd2f" },
+  ],
 ]
 
 [ui.sidebar.spaces]

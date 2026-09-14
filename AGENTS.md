@@ -16,7 +16,10 @@ A herdr plugin that marks agent panes idle at the prompt while a monitor or back
 
 - Single file `herdr_bg_activity.py`, started by herdr as `python3 herdr_bg_activity.py` (`herdr-plugin.toml`, `[[startup]]`).
 - Talks to the herdr socket API directly (one request per connection); CLI calls cost ~140 ms each and would dominate the 2 s poll. Polling instead of `events.subscribe` is deliberate: subscriptions can silently stop receiving (herdrdev/herdr#3124), and footer changes emit no event anyway.
-- Footer parsing only looks below the last horizontal rule. `← N agent` is the agent-view hint present in every pane, not background work.
+- Footer parsing only looks below the last horizontal rule. `← N agent` is the agent-view hint present in every pane, not background work. Running subagents are the lines below the footer ending in `· ↓ <n> tokens`; the `● main` line is not counted.
+- Model, effort and context use come from `${XDG_CACHE_HOME:-~/.cache}/herdr-bg-activity/sessions/<session_id>.json`, written by the user's Claude Code statusline command (contract in `README.md`); the session id comes from `agent.list[].agent_session`. The file name is only used when the id looks like a UUID, and files over 64 KiB are ignored.
+- Remote Control comes from Claude Code's `~/.claude/sessions/<pid>.json` (`bridgeSessionId` set, pid alive). The statusline input's `remote` field is not Remote Control: it stayed unset in a session registered for it (measured on Claude Code 2.1.270).
+- Context use is published under one of three keys (`ctx`, `ctx_warn`, `ctx_crit`) because herdr's numeric sidebar rules parse the whole value and `67%` is not a number.
 - Only `pane_not_found` / `workspace_not_found` count as a vanished target; every other error reaches `run()`, which logs it and keeps polling.
 
 ## Commands

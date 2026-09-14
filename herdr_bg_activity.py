@@ -10,6 +10,19 @@ as display metadata:
 - workspace token `bg`   e.g. "⧗ 3"                     (Space rows: `$bg`)
 - workspace token `cmd`  detected agent names, e.g. "claude" (Space rows: `$cmd`)
 
+For Claude Code panes it also publishes session details:
+
+- `model`   model abbreviation, e.g. "O5" for claude-opus-5
+- `effort`  effort level as a bar, "▁" low … "█" max
+- `agents`  running subagents listed below the footer, e.g. "↳2"
+- `ctx`, `ctx_warn`, `ctx_crit`  context use, e.g. "67%"; exactly one is set,
+  chosen by threshold, so each can carry its own colour
+- `rc`      "⇄" while the session is registered for Remote Control
+
+Model, effort and context come from a snapshot the Claude Code statusline
+command writes per session (see README); Remote Control from Claude Code's own
+per-process session files. herdr names the session of each pane.
+
 Semantic state, waits and notifications stay untouched.
 """
 
@@ -36,6 +49,15 @@ QUIET_STATES = frozenset({"idle", "done"})
 _RULE = re.compile(r"^─{10,}$")
 _ITEM = re.compile(r"^(\d+) (monitor|shell)s?$")
 _PLURAL = {"monitor": "monitors", "shell": "shells"}
+# A running subagent below the footer: "◯ general-purpose  Reading …  18s · ↓ 140.1k tokens"
+_SUBAGENT = re.compile(r"^\S \S+ {2,}.* · ↓ [\d.]+[kM]? tokens$")
+
+SESSION_KEYS = ("model", "effort", "agents", "ctx", "ctx_warn", "ctx_crit", "rc")
+_SESSION_ID = re.compile(r"^[0-9A-Fa-f-]{36}$")
+MAX_SNAPSHOT_BYTES = 65_536
+EFFORT_BARS = {"low": "▁", "medium": "▃", "high": "▅", "xhigh": "▇", "max": "█"}
+CTX_WARN_PERCENT = 70
+CTX_CRIT_PERCENT = 90
 
 
 NOT_FOUND = frozenset({"pane_not_found", "workspace_not_found"})
@@ -76,6 +98,140 @@ def describe(counts: dict[str, int]) -> str | None:
         f"{n} {_PLURAL[kind] if n > 1 else kind}" for kind, n in sorted(counts.items())
     ]
     return "⧗ " + ", ".join(parts)
+
+
+def subagent_count(screen: str) -> int:
+    """Count running subagents Claude Code lists below its footer."""
+    lines = screen.splitlines()
+    rules = [i for i, line in enumerate(lines) if _RULE.match(line.strip())]
+    if not rules:
+        return 0
+    return sum(1 for line in lines[rules[-1] + 1 :] if _SUBAGENT.match(line.strip()))
+
+
+def model_abbrev(model_id: object) -> str | None:
+    """Family initial plus version digits: claude-fable-5-1 -> F51.
+
+    A trailing context marker ("[1m]") and a date suffix are dropped. An id
+    without a family name before its version yields None.
+    """
+    if not isinstance(model_id, str):
+        return None
+    parts = model_id.split("[", 1)[0].strip().lower().removeprefix("claude-").split("-")
+    if not parts[0].isalpha():
+        return None
+    digits = []
+    for part in parts[1:]:
+        if not part.isdigit() or len(part) >= 8:
+            break
+        digits.append(part)
+    if not digits:
+        return None
+    return parts[0][0].upper() + "".join(digits)
+
+
+def session_dir() -> str:
+    base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+    return os.path.join(base, "herdr-bg-activity", "sessions")
+
+
+def claude_sessions_dir() -> str:
+    base = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+    return os.path.join(base, "sessions")
+
+
+def _alive(pid: object) -> bool:
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def bridged_sessions(directory: str) -> set[str]:
+    """Session ids of live Claude Code processes registered for Remote Control.
+
+    Claude Code keeps one `<pid>.json` per process and sets `bridgeSessionId`
+    once Remote Control is set up for it. Files of exited processes stay
+    behind, so only live pids count.
+    """
+    bridged: set[str] = set()
+    try:
+        names = os.listdir(directory)
+    except OSError:
+        return bridged
+    for name in names:
+        if not name.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(directory, name), "rb") as handle:
+                raw = handle.read(MAX_SNAPSHOT_BYTES + 1)
+            data = json.loads(raw) if len(raw) <= MAX_SNAPSHOT_BYTES else None
+        except (OSError, ValueError):
+            continue
+        if (
+            isinstance(data, dict)
+            and isinstance(data.get("bridgeSessionId"), str)
+            and isinstance(data.get("sessionId"), str)
+            and _alive(data.get("pid"))
+        ):
+            bridged.add(data["sessionId"])
+    return bridged
+
+
+def read_snapshot(directory: str, session_id: object) -> dict | None:
+    """Load the statusline snapshot for one session, or None if unusable."""
+    if not isinstance(session_id, str) or not _SESSION_ID.match(session_id):
+        return None
+    try:
+        with open(os.path.join(directory, f"{session_id}.json"), "rb") as handle:
+            raw = handle.read(MAX_SNAPSHOT_BYTES + 1)
+    except OSError:
+        return None
+    if len(raw) > MAX_SNAPSHOT_BYTES:
+        return None
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _field(data: dict, *path: str) -> object:
+    for key in path:
+        if not isinstance(data, dict):
+            return None
+        data = data.get(key)
+    return data
+
+
+def session_tokens(
+    snapshot: dict | None, subagents: int, bridged: bool = False
+) -> dict:
+    tokens: dict[str, str | None] = dict.fromkeys(SESSION_KEYS)
+    tokens["agents"] = f"↳{subagents}" if subagents else None
+    tokens["rc"] = "⇄" if bridged else None
+    if snapshot is None:
+        return tokens
+    tokens["model"] = model_abbrev(_field(snapshot, "model", "id"))
+    level = _field(snapshot, "effort", "level")
+    tokens["effort"] = EFFORT_BARS.get(level) if isinstance(level, str) else None
+    percent = _field(snapshot, "context_window", "used_percentage")
+    if isinstance(percent, (int, float)) and not isinstance(percent, bool):
+        value = round(percent)
+        key = (
+            "ctx_crit"
+            if value >= CTX_CRIT_PERCENT
+            else "ctx_warn"
+            if value >= CTX_WARN_PERCENT
+            else "ctx"
+        )
+        tokens[key] = f"{value}%"
+    return tokens
 
 
 class Herdr:
@@ -140,10 +296,20 @@ class Publisher:
         return {target for k, target in self.sent if k == kind}
 
 
-def tick(herdr: Herdr, publisher: Publisher) -> None:
+def tick(
+    herdr: Herdr,
+    publisher: Publisher,
+    sessions: str | None = None,
+    claude_sessions: str | None = None,
+) -> None:
     now = time.monotonic()
+    sessions = session_dir() if sessions is None else sessions
+    claude_sessions = (
+        claude_sessions_dir() if claude_sessions is None else claude_sessions
+    )
+    bridged: set[str] | None = None
     agents = herdr.call("agent.list", {})["agents"]
-    pane_bg: dict[str, str | None] = {}
+    pane_tokens: dict[str, dict] = {}
     ws_names: dict[str, set[str]] = {}
     ws_count: dict[str, int] = {}
     skipped_panes: set[str] = set()
@@ -152,8 +318,11 @@ def tick(herdr: Herdr, publisher: Publisher) -> None:
         pane, ws = agent["pane_id"], agent["workspace_id"]
         if agent.get("agent"):
             ws_names.setdefault(ws, set()).add(agent["agent"])
+        quiet = agent.get("agent_status") in QUIET_STATES
+        claude = agent.get("agent") == "claude"
         counts: dict[str, int] = {}
-        if agent.get("agent_status") in QUIET_STATES:
+        subagents = 0
+        if quiet or claude:
             try:
                 read = herdr.call("pane.read", {"pane_id": pane, "source": "detection"})
             except HerdrError as exc:
@@ -163,14 +332,33 @@ def tick(herdr: Herdr, publisher: Publisher) -> None:
                 skipped_panes.add(pane)
                 skipped_workspaces.add(ws)
                 continue
-            counts = background_counts(read["read"]["text"])
-        pane_bg[pane] = describe(counts)
+            text = read["read"]["text"]
+            if quiet:
+                counts = background_counts(text)
+            if claude:
+                subagents = subagent_count(text)
+        tokens = {"bg": describe(counts)}
+        if claude:
+            session = agent.get("agent_session") or {}
+            session_id = session.get("value") if session.get("kind") == "id" else None
+            if bridged is None:
+                bridged = bridged_sessions(claude_sessions)
+            tokens.update(
+                session_tokens(
+                    read_snapshot(sessions, session_id),
+                    subagents,
+                    session_id in bridged,
+                )
+            )
+        else:
+            tokens.update(dict.fromkeys(SESSION_KEYS))
+        pane_tokens[pane] = tokens
         ws_count[ws] = ws_count.get(ws, 0) + sum(counts.values())
 
-    for pane in publisher.targets("pane") - pane_bg.keys() - skipped_panes:
-        pane_bg[pane] = None
-    for pane, value in pane_bg.items():
-        publisher.publish("pane", pane, {"bg": value}, now)
+    for pane in publisher.targets("pane") - pane_tokens.keys() - skipped_panes:
+        pane_tokens[pane] = {"bg": None, **dict.fromkeys(SESSION_KEYS)}
+    for pane, tokens in pane_tokens.items():
+        publisher.publish("pane", pane, tokens, now)
 
     workspaces = {
         w["workspace_id"] for w in herdr.call("workspace.list", {})["workspaces"]
