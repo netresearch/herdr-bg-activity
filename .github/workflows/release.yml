@@ -1,0 +1,33 @@
+name: Release
+
+# A pushed version tag publishes a GitHub Release through the org
+# python-release reusable. There is no PyPI package: the plugin is installed
+# from the repository with `herdr plugin install`, so the release carries the
+# tagged source tree as an archive plus its checksum.
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions: {}
+
+jobs:
+  release:
+    uses: netresearch/.github/.github/workflows/python-release.yml@main
+    permissions:
+      contents: write
+      id-token: write
+    with:
+      publish-pypi: false
+      package-manager: pip
+      check-cmd: >-
+        python -c 'import os, tomllib;
+        v = tomllib.load(open("herdr-plugin.toml", "rb"))["version"];
+        t = os.environ["GITHUB_REF_NAME"].removeprefix("v");
+        assert v == t, f"tag {t} != herdr-plugin.toml version {v}"'
+      build-cmd: >-
+        mkdir -p dist &&
+        git archive --format=tar.gz --prefix="herdr-bg-activity-${GITHUB_REF_NAME}/"
+        -o "dist/herdr-bg-activity-${GITHUB_REF_NAME}.tar.gz" HEAD &&
+        (cd dist && sha256sum -- *.tar.gz > SHA256SUMS.txt)
+      release-files: 'dist/*'
