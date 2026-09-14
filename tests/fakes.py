@@ -15,12 +15,19 @@ def screen(*footer: str, above: str = "● done.") -> str:
 class RecordingHerdr:
     """Answers from fixed data and records every metadata report."""
 
-    def __init__(self, agents=(), workspaces=(), screens=None, missing=()):
+    def __init__(self, agents=(), workspaces=(), screens=None, missing=(), broken=()):
         self.agents = list(agents)
         self.workspaces = list(workspaces)
         self.screens = dict(screens or {})
-        self.missing = set(missing)
+        self.missing = set(missing)  # answered with <kind>_not_found, as herdr does
+        self.broken = set(broken)  # answered with some other error code
         self.reports = []
+
+    def fail(self, method, target, kind):
+        if target in self.broken:
+            raise HerdrError("internal_error", f"{method}: boom")
+        if target in self.missing:
+            raise HerdrError(f"{kind}_not_found", f"{method}: {target} not found")
 
     def call(self, method, params):
         if method == "agent.list":
@@ -28,13 +35,12 @@ class RecordingHerdr:
         if method == "workspace.list":
             return {"workspaces": [{"workspace_id": w} for w in self.workspaces]}
         if method == "pane.read":
-            if params["pane_id"] in self.missing:
-                raise HerdrError("pane.read: pane not found")
+            self.fail(method, params["pane_id"], "pane")
             return {"read": {"text": self.screens[params["pane_id"]]}}
         if method.endswith(".report_metadata"):
-            target = params.get("pane_id") or params.get("workspace_id")
-            if target in self.missing:
-                raise HerdrError(f"{method}: not found")
+            kind = method.split(".")[0]
+            target = params[f"{kind}_id"]
+            self.fail(method, target, kind)
             self.reports.append((method, target, params))
             return {}
         raise AssertionError(f"unexpected call {method}")

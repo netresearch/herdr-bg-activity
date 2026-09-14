@@ -2,7 +2,7 @@ import unittest
 
 from fakes import RecordingHerdr
 
-from herdr_bg_activity import REFRESH_SECONDS, SOURCE, TTL_MS, Publisher
+from herdr_bg_activity import REFRESH_SECONDS, SOURCE, TTL_MS, HerdrError, Publisher
 
 REPORT = "pane.report_metadata"
 
@@ -56,6 +56,14 @@ class PublisherTest(unittest.TestCase):
         self.herdr.missing.add("w1:p1")
         self.publish(None, now=0.1)
         self.assertEqual(self.publisher.targets("pane"), set())
+
+    def test_other_errors_propagate_and_keep_the_target(self):
+        self.publish("⧗ 1 shell", now=0.0)
+        self.herdr.broken.add("w1:p1")
+        with self.assertRaises(HerdrError) as caught:
+            self.publish(None, now=0.1)
+        self.assertEqual(caught.exception.code, "internal_error")
+        self.assertEqual(self.publisher.targets("pane"), {"w1:p1"})
 
 
 if __name__ == "__main__":

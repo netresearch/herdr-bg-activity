@@ -2,7 +2,7 @@ import unittest
 
 from fakes import RecordingHerdr, screen
 
-from herdr_bg_activity import Publisher, tick
+from herdr_bg_activity import HerdrError, Publisher, tick
 
 
 def agent(pane, ws, status="idle", name="claude"):
@@ -65,6 +65,14 @@ class TickTest(unittest.TestCase):
         self.assertEqual(
             herdr.reported("pane.report_metadata", "w1:p9")[0]["tokens"], {"bg": None}
         )
+
+    def test_other_pane_read_error_is_not_mistaken_for_a_closed_pane(self):
+        herdr = RecordingHerdr(
+            agents=[agent("w1:p1", "w1")], workspaces=["w1"], broken={"w1:p1"}
+        )
+        with self.assertRaises(HerdrError) as caught:
+            tick(herdr, Publisher(herdr))
+        self.assertEqual(caught.exception.code, "internal_error")
 
 
 if __name__ == "__main__":

@@ -37,8 +37,15 @@ _ITEM = re.compile(r"^(\d+) (monitor|shell)s?$")
 _PLURAL = {"monitor": "monitors", "shell": "shells"}
 
 
+NOT_FOUND = frozenset({"pane_not_found", "workspace_not_found"})
+
+
 class HerdrError(Exception):
     """The server answered a request with an error."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(f"{code}: {message}")
+        self.code = code
 
 
 def background_counts(screen: str) -> dict[str, int]:
@@ -88,7 +95,11 @@ class Herdr:
                 buf += chunk
         response = json.loads(buf.split(b"\n", 1)[0])
         if "error" in response:
-            raise HerdrError(f"{method}: {response['error']}")
+            error = response["error"]
+            raise HerdrError(
+                str(error.get("code", "unknown")),
+                f"{method}: {error.get('message', error)}",
+            )
         return response["result"]
 
 
@@ -116,7 +127,9 @@ class Publisher:
             params["ttl_ms"] = TTL_MS
         try:
             self.herdr.call(f"{kind}.report_metadata", params)
-        except HerdrError:
+        except HerdrError as exc:
+            if exc.code not in NOT_FOUND:
+                raise
             # The pane or workspace is gone; forget it.
             self.sent.pop(key, None)
             return
@@ -142,7 +155,9 @@ def tick(herdr: Herdr, publisher: Publisher) -> None:
         if agent.get("agent_status") in QUIET_STATES:
             try:
                 read = herdr.call("pane.read", {"pane_id": pane, "source": "detection"})
-            except HerdrError:
+            except HerdrError as exc:
+                if exc.code != "pane_not_found":
+                    raise
                 # Closed since agent.list: leave its tokens alone for this tick.
                 skipped_panes.add(pane)
                 skipped_workspaces.add(ws)
