@@ -1,0 +1,11 @@
+id = "local.bg-activity"
+name = "Background Activity"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+description = "Marks idle agents that still own running monitors or background shells"
+platforms = ["linux", "macos"]
+
+# Long-running on purpose, like herdr.auto-title: the process polls until the
+# server socket goes away, then exits.
+[[startup]]
+command = ["/usr/bin/python3", "herdr_bg_activity.py"]
