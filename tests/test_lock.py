@@ -52,6 +52,37 @@ class AcquireLockTest(unittest.TestCase):
         finally:
             os.close(fd)
 
+    def test_tightens_mode_of_existing_file(self):
+        with open(self.path, "w"):
+            pass
+        os.chmod(self.path, 0o666)
+        os.close(acquire_lock(self.path))
+        self.assertEqual(stat.S_IMODE(os.stat(self.path).st_mode), 0o600)
+
+    def test_refuses_file_owned_by_another_user(self):
+        real_fstat = os.fstat
+
+        def foreign_fstat(fd):
+            info = real_fstat(fd)
+            fields = list(info)
+            fields[stat.ST_UID] = info.st_uid + 1
+            return os.stat_result(fields)
+
+        closed = []
+        real_close = os.close
+        with (
+            mock.patch("herdr_bg_activity.os.fstat", side_effect=foreign_fstat),
+            mock.patch(
+                "herdr_bg_activity.os.close",
+                side_effect=lambda fd: (closed.append(fd), real_close(fd)),
+            ),
+            mock.patch("herdr_bg_activity.fcntl.flock") as flock,
+            self.assertRaises(PermissionError),
+        ):
+            acquire_lock(self.path)
+        flock.assert_not_called()
+        self.assertEqual(len(closed), 1)
+
     def test_refuses_planted_symlink(self):
         target = os.path.join(self.dir.name, "victim")
         os.symlink(target, self.path)

@@ -21,6 +21,7 @@ import json
 import os
 import re
 import socket
+import stat
 import sys
 import tempfile
 import time
@@ -200,10 +201,22 @@ def lock_path(socket_path: str) -> str:
 
 
 def acquire_lock(path: str) -> int:
-    """Block until the lock is ours. The temp directory may be shared, so the
-    file is private and a planted symlink is refused."""
+    """Block until the lock is ours.
+
+    The temp directory may be shared and the path is predictable, so a planted
+    symlink is refused and so is a file another user created first, which
+    could otherwise hold the lock and block startup forever.
+    """
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
-    fcntl.flock(fd, fcntl.LOCK_EX)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():
+            raise PermissionError(f"refusing lock file not owned by this user: {path}")
+        os.fchmod(fd, 0o600)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+    except BaseException:
+        os.close(fd)
+        raise
     return fd
 
 
