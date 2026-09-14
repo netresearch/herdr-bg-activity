@@ -44,6 +44,15 @@ class RunTest(unittest.TestCase):
         _, log = self.run_quietly(ScriptedHerdr(errors))
         self.assertEqual(log.count("tick failed"), 1)
 
+    def test_other_error_breaks_the_connection_failure_streak(self):
+        errors = [OSError("gone")] * (MAX_CONNECT_FAILURES - 1)
+        errors += [TypeError("answered")]
+        errors += [OSError("gone")] * MAX_CONNECT_FAILURES
+        herdr = ScriptedHerdr(errors)
+        code, _ = self.run_quietly(herdr)
+        self.assertEqual(code, 0)
+        self.assertEqual(herdr.ticks, 2 * MAX_CONNECT_FAILURES)
+
     def test_exits_after_consecutive_connection_failures(self):
         herdr = ScriptedHerdr([OSError("gone")] * MAX_CONNECT_FAILURES)
         code, log = self.run_quietly(herdr)

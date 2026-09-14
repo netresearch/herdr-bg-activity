@@ -225,6 +225,7 @@ def run(herdr: Herdr, publisher: Publisher, sleep=time.sleep) -> int:
                 print(f"herdr unreachable, exiting: {exc}", file=sys.stderr)
                 return 0
         except Exception as exc:  # noqa: BLE001 - a crash would hide the markers silently
+            failures = 0  # herdr answered, so the connection-failure streak is over
             message = f"{type(exc).__name__}: {exc}"
             if message != last_error:
                 print(f"tick failed: {message}", file=sys.stderr)
