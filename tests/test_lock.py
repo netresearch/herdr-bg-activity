@@ -55,7 +55,7 @@ class AcquireLockTest(unittest.TestCase):
     def test_tightens_mode_of_existing_file(self):
         with open(self.path, "w"):
             pass
-        os.chmod(self.path, 0o644)
+        os.chmod(self.path, 0o640)
         os.close(acquire_lock(self.path))
         self.assertEqual(stat.S_IMODE(os.stat(self.path).st_mode), 0o600)
 
