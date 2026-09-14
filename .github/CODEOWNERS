@@ -1,0 +1,3 @@
+# Review assignment only: main requires no approvals, so this routes pull
+# requests to the maintainers without gating them.
+* @CybotTM @netresearch/netresearch

@@ -1,0 +1,61 @@
+name: Release
+
+# A pushed version tag publishes a GitHub Release through the org
+# python-release reusable. There is no PyPI package: the plugin is installed
+# from the repository with `herdr plugin install`, so the release carries the
+# tagged source tree as an archive plus its checksum.
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions: {}
+
+jobs:
+  release:
+    uses: netresearch/.github/.github/workflows/python-release.yml@main
+    permissions:
+      contents: write
+      id-token: write
+    with:
+      publish-pypi: false
+      package-manager: pip
+      check-cmd: >-
+        python -c 'import os, tomllib;
+        v = tomllib.load(open("herdr-plugin.toml", "rb"))["version"];
+        t = os.environ["GITHUB_REF_NAME"].removeprefix("v");
+        assert v == t, f"tag {t} != herdr-plugin.toml version {v}"'
+      build-cmd: >-
+        mkdir -p dist &&
+        git archive --format=tar.gz --prefix="herdr-bg-activity-${GITHUB_REF_NAME}/"
+        -o "dist/herdr-bg-activity-${GITHUB_REF_NAME}.tar.gz" HEAD &&
+        (cd dist && sha256sum -- *.tar.gz > SHA256SUMS.txt)
+      release-files: 'dist/*'
+
+  # SLSA build provenance for the archive and checksum file the release job
+  # attaches. The reusable uploads them as the `dist` artifact of this run.
+  attest:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+      attestations: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Download distribution artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist/
+
+      - name: Generate SLSA build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt

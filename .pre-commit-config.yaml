@@ -1,0 +1,27 @@
+# Local mirror of the fast CI checks (ci.yml runs ruff through the org
+# python-ci reusable). CI stays the authoritative gate; Renovate bumps the
+# pinned revisions.
+#
+# Install once after clone: `pre-commit install --install-hooks`.
+
+default_install_hook_types: [pre-commit]
+default_stages: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: check-toml
+      - id: check-yaml
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.7
+    hooks:
+      - id: ruff-check
+        args: [--no-fix]
+      - id: ruff-format
+        args: [--check]

@@ -1,5 +1,7 @@
 # herdr-bg-activity
 
+[![CI](https://github.com/netresearch/herdr-bg-activity/actions/workflows/ci.yml/badge.svg)](https://github.com/netresearch/herdr-bg-activity/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/github/license/netresearch/herdr-bg-activity)](LICENSE)
+
 A [herdr](https://herdr.dev) plugin. herdr shows a Claude Code pane as `idle` as soon as its turn ends, even while a monitor or background shell it started is still running ([herdr#1217](https://github.com/herdrdev/herdr/issues/1217)). This plugin reads the footer Claude Code renders below its prompt box and publishes display metadata, so the sidebar can tell "ready, but background work running" from "nothing running".
 
 The footer format (`⏵⏵ auto mode on · 1 monitor · ← 1 agent`) belongs to Claude Code and was captured on 2.1.270; if a Claude Code update renames it, the tokens simply stop appearing.
@@ -46,6 +48,15 @@ rows = [
 ```
 
 A file lock in `$XDG_RUNTIME_DIR` (or the temp directory) keeps one instance per herdr session; a new instance waits until the previous one exits.
+
+## Verify a release download
+
+Each GitHub Release carries the tagged source archive, `SHA256SUMS.txt`, and SLSA build provenance for both:
+
+```sh
+gh attestation verify herdr-bg-activity-vX.Y.Z.tar.gz --repo netresearch/herdr-bg-activity
+sha256sum --check SHA256SUMS.txt
+```
 
 ## Development
 
