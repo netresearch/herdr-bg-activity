@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Mark herdr agents that sit at the prompt while background work still runs.
 
 herdr knows five agent states. A Claude Code pane whose turn has ended but
@@ -17,11 +16,14 @@ Semantic state, waits and notifications stay untouched.
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import json
 import os
 import re
 import socket
+import stat
 import sys
+import tempfile
 import time
 
 SOURCE = "netresearch.bg-activity"
@@ -36,8 +38,15 @@ _ITEM = re.compile(r"^(\d+) (monitor|shell)s?$")
 _PLURAL = {"monitor": "monitors", "shell": "shells"}
 
 
+NOT_FOUND = frozenset({"pane_not_found", "workspace_not_found"})
+
+
 class HerdrError(Exception):
     """The server answered a request with an error."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(f"{code}: {message}")
+        self.code = code
 
 
 def background_counts(screen: str) -> dict[str, int]:
@@ -87,7 +96,11 @@ class Herdr:
                 buf += chunk
         response = json.loads(buf.split(b"\n", 1)[0])
         if "error" in response:
-            raise HerdrError(f"{method}: {response['error']}")
+            error = response["error"]
+            raise HerdrError(
+                str(error.get("code", "unknown")),
+                f"{method}: {error.get('message', error)}",
+            )
         return response["result"]
 
 
@@ -115,7 +128,9 @@ class Publisher:
             params["ttl_ms"] = TTL_MS
         try:
             self.herdr.call(f"{kind}.report_metadata", params)
-        except HerdrError:
+        except HerdrError as exc:
+            if exc.code not in NOT_FOUND:
+                raise
             # The pane or workspace is gone; forget it.
             self.sent.pop(key, None)
             return
@@ -131,18 +146,28 @@ def tick(herdr: Herdr, publisher: Publisher) -> None:
     pane_bg: dict[str, str | None] = {}
     ws_names: dict[str, set[str]] = {}
     ws_count: dict[str, int] = {}
+    skipped_panes: set[str] = set()
+    skipped_workspaces: set[str] = set()
     for agent in agents:
         pane, ws = agent["pane_id"], agent["workspace_id"]
         if agent.get("agent"):
             ws_names.setdefault(ws, set()).add(agent["agent"])
         counts: dict[str, int] = {}
         if agent.get("agent_status") in QUIET_STATES:
-            read = herdr.call("pane.read", {"pane_id": pane, "source": "detection"})
+            try:
+                read = herdr.call("pane.read", {"pane_id": pane, "source": "detection"})
+            except HerdrError as exc:
+                if exc.code != "pane_not_found":
+                    raise
+                # Closed since agent.list: leave its tokens alone for this tick.
+                skipped_panes.add(pane)
+                skipped_workspaces.add(ws)
+                continue
             counts = background_counts(read["read"]["text"])
         pane_bg[pane] = describe(counts)
         ws_count[ws] = ws_count.get(ws, 0) + sum(counts.values())
 
-    for pane in publisher.targets("pane") - pane_bg.keys():
+    for pane in publisher.targets("pane") - pane_bg.keys() - skipped_panes:
         pane_bg[pane] = None
     for pane, value in pane_bg.items():
         publisher.publish("pane", pane, {"bg": value}, now)
@@ -150,7 +175,7 @@ def tick(herdr: Herdr, publisher: Publisher) -> None:
     workspaces = {
         w["workspace_id"] for w in herdr.call("workspace.list", {})["workspaces"]
     }
-    for ws in workspaces | publisher.targets("workspace"):
+    for ws in (workspaces | publisher.targets("workspace")) - skipped_workspaces:
         names = ws_names.get(ws)
         count = ws_count.get(ws, 0)
         publisher.publish(
@@ -164,6 +189,37 @@ def tick(herdr: Herdr, publisher: Publisher) -> None:
         )
 
 
+def lock_path(socket_path: str) -> str:
+    """Per-user, per-session lock file outside herdr's own directories.
+
+    Named after the socket so a herdr-started and a hand-started instance for
+    the same session meet on the same file.
+    """
+    base = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
+    digest = hashlib.sha256(os.path.realpath(socket_path).encode()).hexdigest()[:16]
+    return os.path.join(base, f"herdr-bg-activity-{os.getuid()}-{digest}.lock")
+
+
+def acquire_lock(path: str) -> int:
+    """Block until the lock is ours.
+
+    The temp directory may be shared and the path is predictable, so a planted
+    symlink is refused and so is a file another user created first, which
+    could otherwise hold the lock and block startup forever.
+    """
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():
+            raise PermissionError(f"refusing lock file not owned by this user: {path}")
+        os.fchmod(fd, 0o600)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd
+
+
 def main() -> int:
     socket_path = os.environ.get("HERDR_SOCKET_PATH")
     if not socket_path:
@@ -172,14 +228,19 @@ def main() -> int:
 
     # One instance per herdr session. A server restart starts a new instance
     # while the previous one is still counting its connection failures, so wait
-    # for the lock instead of giving up. The lock sits next to the socket, not
-    # in HERDR_PLUGIN_STATE_DIR, so a hand-started instance shares it too.
-    lock_path = os.path.join(os.path.dirname(socket_path), "bg-activity.lock")
-    lock = open(lock_path, "w")  # noqa: SIM115
-    fcntl.flock(lock, fcntl.LOCK_EX)
+    # for the lock instead of giving up.
+    lock = acquire_lock(lock_path(socket_path))  # noqa: F841 - held until exit
 
     herdr = Herdr(socket_path)
-    publisher = Publisher(herdr)
+    return run(herdr, Publisher(herdr))
+
+
+def run(herdr: Herdr, publisher: Publisher, sleep=time.sleep) -> int:
+    """Poll until herdr stays unreachable; any other failure only skips a tick.
+
+    A crash would remove the markers until the next server start without any
+    visible sign, so unexpected response shapes are logged and retried.
+    """
     failures = 0
     last_error = None
     while True:
@@ -191,11 +252,13 @@ def main() -> int:
             if failures >= MAX_CONNECT_FAILURES:
                 print(f"herdr unreachable, exiting: {exc}", file=sys.stderr)
                 return 0
-        except (HerdrError, KeyError, ValueError) as exc:
-            if str(exc) != last_error:
-                print(f"tick failed: {exc}", file=sys.stderr)
-                last_error = str(exc)
-        time.sleep(POLL_SECONDS)
+        except Exception as exc:  # noqa: BLE001 - a crash would hide the markers silently
+            failures = 0  # herdr answered, so the connection-failure streak is over
+            message = f"{type(exc).__name__}: {exc}"
+            if message != last_error:
+                print(f"tick failed: {message}", file=sys.stderr)
+                last_error = message
+        sleep(POLL_SECONDS)
 
 
 if __name__ == "__main__":
