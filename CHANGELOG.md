@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-16
+
 ### Fixed
 
 - The instance lock treats an `XDG_RUNTIME_DIR` that names no existing directory like an unset one, instead of failing. WSL exports the variable without systemd-logind ever creating the directory, so opening the lock raised `FileNotFoundError` and herdr recorded the plugin as `startup … failed` before a single token was published.
@@ -35,6 +37,7 @@ First release.
 - The poller keeps running through unexpected API responses and panes that close mid-poll, treats only `pane_not_found` / `workspace_not_found` as a vanished target, and exits after repeated connection failures.
 - Requires herdr 0.9.0 or later and `python3` 3.10+ on Linux or macOS; standard library only.
 
-[Unreleased]: https://github.com/netresearch/herdr-bg-activity/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/netresearch/herdr-bg-activity/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/netresearch/herdr-bg-activity/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/netresearch/herdr-bg-activity/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/netresearch/herdr-bg-activity/releases/tag/v0.1.0
