@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Fixed
+
+- The instance lock treats an `XDG_RUNTIME_DIR` that names no existing directory like an unset one, instead of failing. WSL exports the variable without systemd-logind ever creating the directory, so opening the lock raised `FileNotFoundError` and herdr recorded the plugin as `startup … failed` before a single token was published.
+
+### Changed
+
+- The fallback lock directory is `${XDG_CACHE_HOME:-~/.cache}/herdr-bg-activity/`, created with mode 0700, rather than the shared temp directory. A predictable name in a world-writable directory can be planted by another local user, and `acquire_lock` then refuses the file and the plugin never starts (CWE-377).
+
 ## [0.2.0] - 2026-09-14
 
 ### Added

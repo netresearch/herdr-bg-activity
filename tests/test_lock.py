@@ -7,23 +7,60 @@ from unittest import mock
 
 import fakes  # noqa: F401 - puts the plugin module on sys.path
 
-from herdr_bg_activity import acquire_lock, lock_path
+from herdr_bg_activity import acquire_lock, cache_dir, lock_path
 
 SOCKET = "/home/user/.config/herdr/herdr.sock"
 
 
 class LockPathTest(unittest.TestCase):
     def test_uses_runtime_dir_not_herdr_dir(self):
-        with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": "/run/user/1000"}):
-            path = lock_path(SOCKET)
-        self.assertEqual(os.path.dirname(path), "/run/user/1000")
+        with tempfile.TemporaryDirectory() as runtime_dir:
+            with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": runtime_dir}):
+                path = lock_path(SOCKET)
+            self.assertEqual(os.path.dirname(path), runtime_dir)
         self.assertIn(f"-{os.getuid()}-", os.path.basename(path))
 
-    def test_falls_back_to_temp_dir(self):
-        env = {k: v for k, v in os.environ.items() if k != "XDG_RUNTIME_DIR"}
-        with mock.patch.dict(os.environ, env, clear=True):
-            path = lock_path(SOCKET)
-        self.assertEqual(os.path.dirname(path), tempfile.gettempdir())
+    def test_falls_back_to_cache_dir(self):
+        with tempfile.TemporaryDirectory() as cache:
+            env = {k: v for k, v in os.environ.items() if k != "XDG_RUNTIME_DIR"}
+            env["XDG_CACHE_HOME"] = cache
+            with mock.patch.dict(os.environ, env, clear=True):
+                path = lock_path(SOCKET)
+                expected = cache_dir()
+            self.assertEqual(os.path.dirname(path), expected)
+
+    def test_falls_back_to_cache_dir_when_runtime_dir_is_missing(self):
+        """WSL exports XDG_RUNTIME_DIR without systemd-logind creating it.
+
+        The directory named by the variable then never exists, and opening the
+        lock inside it raised FileNotFoundError before herdr could start the
+        plugin at all.
+        """
+        with tempfile.TemporaryDirectory() as cache:
+            missing = os.path.join(cache, "run", "user", "1001")
+            with mock.patch.dict(
+                os.environ, {"XDG_RUNTIME_DIR": missing, "XDG_CACHE_HOME": cache}
+            ):
+                path = lock_path(SOCKET)
+                expected = cache_dir()
+            self.assertEqual(os.path.dirname(path), expected)
+
+    def test_fallback_creates_a_private_cache_dir(self):
+        """The shared temp directory let another user plant the lock name.
+
+        acquire_lock refuses a file it does not own, so a planted name kept the
+        plugin from starting. The cache directory is the user's own, and it is
+        created before the lock is opened in it.
+        """
+        with tempfile.TemporaryDirectory() as cache:
+            with mock.patch.dict(
+                os.environ, {"XDG_RUNTIME_DIR": "", "XDG_CACHE_HOME": cache}
+            ):
+                path = lock_path(SOCKET)
+                directory = cache_dir()
+            self.assertTrue(os.path.isdir(directory))
+            self.assertEqual(stat.S_IMODE(os.stat(directory).st_mode), 0o700)
+            self.assertEqual(os.path.dirname(path), directory)
 
     def test_same_session_same_lock_other_session_other_lock(self):
         self.assertEqual(lock_path(SOCKET), lock_path(SOCKET))
