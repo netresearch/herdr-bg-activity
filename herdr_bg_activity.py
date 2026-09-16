@@ -36,7 +36,6 @@ import re
 import socket
 import stat
 import sys
-import tempfile
 import time
 
 SOURCE = "netresearch.bg-activity"
@@ -130,9 +129,13 @@ def model_abbrev(model_id: object) -> str | None:
     return parts[0][0].upper() + "".join(digits)
 
 
-def session_dir() -> str:
+def cache_dir() -> str:
     base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
-    return os.path.join(base, "herdr-bg-activity", "sessions")
+    return os.path.join(base, "herdr-bg-activity")
+
+
+def session_dir() -> str:
+    return os.path.join(cache_dir(), "sessions")
 
 
 def claude_sessions_dir() -> str:
@@ -383,7 +386,17 @@ def lock_path(socket_path: str) -> str:
     Named after the socket so a herdr-started and a hand-started instance for
     the same session meet on the same file.
     """
-    base = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
+    base = os.environ.get("XDG_RUNTIME_DIR") or ""
+    if not os.path.isdir(base):
+        # WSL exports the variable without systemd-logind ever creating the
+        # directory, so a set value is not a usable one. The shared temp
+        # directory is no substitute: it is world-writable, so another user can
+        # plant this predictable name first, and acquire_lock then refuses the
+        # file and the plugin never starts. The plugin's own cache directory is
+        # private to the user. A lock is runtime state rather than cache, but
+        # it is one file in a directory that is already ours.
+        base = cache_dir()
+        os.makedirs(base, mode=0o700, exist_ok=True)
     digest = hashlib.sha256(os.path.realpath(socket_path).encode()).hexdigest()[:16]
     return os.path.join(base, f"herdr-bg-activity-{os.getuid()}-{digest}.lock")
 
@@ -391,9 +404,10 @@ def lock_path(socket_path: str) -> str:
 def acquire_lock(path: str) -> int:
     """Block until the lock is ours.
 
-    The temp directory may be shared and the path is predictable, so a planted
-    symlink is refused and so is a file another user created first, which
-    could otherwise hold the lock and block startup forever.
+    The path is predictable, so a planted symlink is refused and so is a file
+    another user created first, which could otherwise hold the lock and block
+    startup forever. Both directories lock_path picks are private to the user;
+    this stays as the check that does not depend on that.
     """
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     try:

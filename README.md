@@ -92,7 +92,7 @@ rows = [
 ]
 ```
 
-A file lock in `$XDG_RUNTIME_DIR` (or the temp directory) keeps one instance per herdr session; a new instance waits until the previous one exits.
+A file lock in `$XDG_RUNTIME_DIR` — or, where that names no existing directory, in `${XDG_CACHE_HOME:-~/.cache}/herdr-bg-activity/` — keeps one instance per herdr session; a new instance waits until the previous one exits.
 
 ## Verify a release download
 
