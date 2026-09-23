@@ -15,6 +15,8 @@ It changes presentation only. The state icon, waits and notifications still foll
 | Agent row | `$bg` | `⧗ 1 monitor, 2 shells` |
 | Space row | `$bg` | `⧗ 3` |
 | Space row | `$cmd` | `claude` |
+| Space row | `$icon` | `✻ π` symbols of the detected agents |
+| Agent row | `$icon` | `✻` claude, `π` pi; other agents keep their name |
 | Agent row | `$model` | `O5` (claude-opus-5), `F51`, `H45` |
 | Agent row | `$effort` | `▁` low, `▃` medium, `▅` high, `▇` xhigh, `█` max |
 | Agent row | `$agents` | `↳2` running subagents |
@@ -65,7 +67,7 @@ Add the tokens to `~/.config/herdr/config.toml`:
 rows = [
   ["state_icon", "terminal_title_stripped"],
   [
-    "agent",
+    "$icon",
     "$model",
     # Effort colours follow Claude Code's /effort picker (dark theme); max has no
     # static colour there, so it gets Claude's accent colour.
@@ -87,7 +89,7 @@ rows = [
 
 [ui.sidebar.spaces]
 rows = [
-  ["state_icon", "workspace", "$cmd", { token = "$bg", fg = "#fabd2f" }],
+  ["state_icon", "workspace", "$icon", { token = "$bg", fg = "#fabd2f" }],
   ["branch", "git_status"],
 ]
 ```
