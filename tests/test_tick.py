@@ -22,8 +22,8 @@ def agent(pane, ws, status="idle", name="claude", session=None):
     return entry
 
 
-def pane_tokens(bg, **session):
-    return {"bg": bg, **NO_SESSION, **session}
+def pane_tokens(bg, icon="✻", **session):
+    return {"bg": bg, "icon": icon, **NO_SESSION, **session}
 
 
 class TickTest(unittest.TestCase):
@@ -54,7 +54,7 @@ class TickTest(unittest.TestCase):
         )
         self.assertEqual(
             herdr.reported("workspace.report_metadata", "w1")[0]["tokens"],
-            {"cmd": "claude", "bg": "⧗ 1"},
+            {"cmd": "claude", "icon": "✻", "bg": "⧗ 1"},
         )
 
     def test_publishes_session_tokens_from_snapshot_and_screen(self):
@@ -99,10 +99,32 @@ class TickTest(unittest.TestCase):
             workspaces=["w1"],
         )
         self.run_tick(herdr)
-        self.assertEqual(herdr.reported("pane.report_metadata", "w1:p1"), [])
+        self.assertEqual(
+            herdr.reported("pane.report_metadata", "w1:p1")[0]["tokens"],
+            pane_tokens(None, icon="codex"),
+        )
         self.assertEqual(
             herdr.reported("workspace.report_metadata", "w1")[0]["tokens"],
-            {"cmd": "codex", "bg": None},
+            {"cmd": "codex", "icon": "codex", "bg": None},
+        )
+
+    def test_icons_for_known_agents_and_mixed_workspace(self):
+        herdr = RecordingHerdr(
+            agents=[
+                agent("w1:p1", "w1", status="working"),
+                agent("w1:p2", "w1", status="working", name="pi"),
+            ],
+            workspaces=["w1"],
+            screens={"w1:p1": screen("  ⏵⏵ auto mode on")},
+        )
+        self.run_tick(herdr)
+        self.assertEqual(
+            herdr.reported("pane.report_metadata", "w1:p2")[0]["tokens"],
+            pane_tokens(None, icon="π"),
+        )
+        self.assertEqual(
+            herdr.reported("workspace.report_metadata", "w1")[0]["tokens"],
+            {"cmd": "claude, pi", "icon": "π ✻", "bg": None},
         )
 
     def test_working_claude_agent_reports_no_background_work(self):
@@ -112,10 +134,13 @@ class TickTest(unittest.TestCase):
             screens={"w1:p1": screen("  ⏵⏵ auto mode on · 1 shell")},
         )
         self.run_tick(herdr)
-        self.assertEqual(herdr.reported("pane.report_metadata", "w1:p1"), [])
+        self.assertEqual(
+            herdr.reported("pane.report_metadata", "w1:p1")[0]["tokens"],
+            pane_tokens(None),
+        )
         self.assertEqual(
             herdr.reported("workspace.report_metadata", "w1")[0]["tokens"],
-            {"cmd": "claude", "bg": None},
+            {"cmd": "claude", "icon": "✻", "bg": None},
         )
 
     def test_pane_closed_during_tick_skips_only_that_pane(self):
@@ -127,7 +152,10 @@ class TickTest(unittest.TestCase):
         )
         publisher = Publisher(herdr)
         publisher.sent[("pane", "w2:p1")] = (pane_tokens("⧗ 1 shell"), 0.0)
-        publisher.sent[("workspace", "w2")] = ({"cmd": "claude", "bg": "⧗ 1"}, 0.0)
+        publisher.sent[("workspace", "w2")] = (
+            {"cmd": "claude", "icon": "✻", "bg": "⧗ 1"},
+            0.0,
+        )
 
         self.run_tick(herdr, publisher)
 
@@ -145,7 +173,7 @@ class TickTest(unittest.TestCase):
         self.run_tick(herdr, publisher)
         self.assertEqual(
             herdr.reported("pane.report_metadata", "w1:p9")[0]["tokens"],
-            pane_tokens(None),
+            pane_tokens(None, icon=None),
         )
 
     def test_other_pane_read_error_is_not_mistaken_for_a_closed_pane(self):

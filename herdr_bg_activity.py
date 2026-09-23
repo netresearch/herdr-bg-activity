@@ -9,6 +9,8 @@ as display metadata:
 - pane token `bg`        e.g. "⧗ 1 monitor, 2 shells"  (Agent rows: `$bg`)
 - workspace token `bg`   e.g. "⧗ 3"                     (Space rows: `$bg`)
 - workspace token `cmd`  detected agent names, e.g. "claude" (Space rows: `$cmd`)
+- pane token `icon`      agent symbol, e.g. "✻" for claude  (Agent rows: `$icon`)
+- workspace token `icon` symbols of the detected agents, e.g. "✻ π"
 
 For Claude Code panes it also publishes session details:
 
@@ -59,6 +61,9 @@ CTX_WARN_PERCENT = 70
 CTX_CRIT_PERCENT = 90
 
 
+# Symbols for agents; any other agent keeps its name.
+AGENT_ICONS = {"claude": "✻", "pi": "π"}
+
 NOT_FOUND = frozenset({"pane_not_found", "workspace_not_found"})
 
 
@@ -106,6 +111,10 @@ def subagent_count(screen: str) -> int:
     if not rules:
         return 0
     return sum(1 for line in lines[rules[-1] + 1 :] if _SUBAGENT.match(line.strip()))
+
+
+def agent_icon(name: str) -> str:
+    return AGENT_ICONS.get(name, name)
 
 
 def model_abbrev(model_id: object) -> str | None:
@@ -340,7 +349,8 @@ def tick(
                 counts = background_counts(text)
             if claude:
                 subagents = subagent_count(text)
-        tokens = {"bg": describe(counts)}
+        name = agent.get("agent")
+        tokens = {"bg": describe(counts), "icon": agent_icon(name) if name else None}
         if claude:
             session = agent.get("agent_session") or {}
             session_id = session.get("value") if session.get("kind") == "id" else None
@@ -359,7 +369,7 @@ def tick(
         ws_count[ws] = ws_count.get(ws, 0) + sum(counts.values())
 
     for pane in publisher.targets("pane") - pane_tokens.keys() - skipped_panes:
-        pane_tokens[pane] = {"bg": None, **dict.fromkeys(SESSION_KEYS)}
+        pane_tokens[pane] = {"bg": None, "icon": None, **dict.fromkeys(SESSION_KEYS)}
     for pane, tokens in pane_tokens.items():
         publisher.publish("pane", pane, tokens, now)
 
@@ -374,6 +384,7 @@ def tick(
             ws,
             {
                 "cmd": ", ".join(sorted(names)) if names else None,
+                "icon": " ".join(sorted(map(agent_icon, names))) if names else None,
                 "bg": f"⧗ {count}" if count else None,
             },
             now,
