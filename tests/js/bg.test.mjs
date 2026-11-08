@@ -4,7 +4,7 @@
 // (a glob, not the directory: Node 24 rejects a directory with ERR_UNSUPPORTED_DIR_IMPORT)
 
 import assert from "node:assert/strict";
-import { beforeEach, describe, test } from "node:test";
+import { afterEach, beforeEach, describe, test } from "node:test";
 
 import { arg } from "./stubs/gpui.mjs";
 import { reset, state } from "./stubs/herdr.mjs";
@@ -44,9 +44,14 @@ function fakeCx() {
   return cx;
 }
 
+// collectOn logs every failure; silence it per test and restore it after each one.
+const realLog = console.log;
 beforeEach(() => {
   reset();
-  console.log = () => {}; // collectOn logs every failure; keep test output clean
+  console.log = () => {};
+});
+afterEach(() => {
+  console.log = realLog;
 });
 
 describe("collectOn", () => {

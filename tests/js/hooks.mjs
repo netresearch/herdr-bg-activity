@@ -8,7 +8,8 @@ const STUBS = {
   herdr: new URL("./stubs/herdr.mjs", import.meta.url).href,
 };
 
-export async function resolve(specifier, context, nextResolve) {
+// A synchronous hook for module.registerHooks.
+export function resolve(specifier, context, nextResolve) {
   if (Object.hasOwn(STUBS, specifier)) return { url: STUBS[specifier], shortCircuit: true };
   return nextResolve(specifier, context);
 }

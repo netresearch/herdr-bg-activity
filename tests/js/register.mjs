@@ -1,4 +1,7 @@
-// Loaded with `node --import ./tests/js/register.mjs`: installs hooks.mjs.
-import { register } from "node:module";
+// Loaded with `node --import ./tests/js/register.mjs`: installs the resolve hook from hooks.mjs.
+// registerHooks (Node 22.15+) runs in-thread; module.register() is deprecated from Node 26 on.
+import { registerHooks } from "node:module";
 
-register("./hooks.mjs", import.meta.url);
+import { resolve } from "./hooks.mjs";
+
+registerHooks({ resolve });
