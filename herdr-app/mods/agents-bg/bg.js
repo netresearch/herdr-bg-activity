@@ -117,7 +117,13 @@ function isHome(folder) {
   const parts = (folder ?? "/").split("/").filter(Boolean);
   return parts.length === 0 || (parts.length === 1 && parts[0] === "root") || (parts.length === 2 && (parts[0] === "home" || parts[0] === "Users"));
 }
-const within = (path, folder) => path === folder || path.startsWith(`${folder.replace(/\/+$/, "")}/`);
+// True if `path` is `folder` or inside it; a trailing slash on `folder` is ignored.
+function within(path, folder) {
+  let end = folder.length;
+  while (end > 1 && folder[end - 1] === "/") end--;
+  const base = folder.slice(0, end);
+  return path === base || path.startsWith(base === "/" ? "/" : `${base}/`);
+}
 
 function pollPorts(view, cx) {
   if (view.portsBusy || !view.bgScript) return;

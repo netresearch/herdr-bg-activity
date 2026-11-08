@@ -51,8 +51,9 @@ _RULE = re.compile(r"^─{10,}$")
 _ITEM = re.compile(r"^(\d+) (monitor|shell)s?$")
 _PLURAL = {"monitor": "monitors", "shell": "shells"}
 # A running subagent below the footer: "◯ general-purpose  Reading …  18s · ↓ 140.1k tokens"
-# Two spaces after the name; `.*` takes any further ones (no ` {2,}.*` backtracking).
-_SUBAGENT = re.compile(r"^\S \S+  .* · ↓ [\d.]+[kM]? tokens$")
+# Exactly two spaces after the name; `.*` takes any further ones, so ` {2,}.*`
+# would only add backtracking.
+_SUBAGENT = re.compile(r"^\S \S+ {2}.* · ↓ [\d.]+[kM]? tokens$")
 
 SESSION_KEYS = ("model", "effort", "agents", "ctx", "ctx_warn", "ctx_crit", "rc")
 _SESSION_ID = re.compile(r"^[0-9A-Fa-f-]{36}$")

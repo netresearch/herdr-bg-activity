@@ -16,6 +16,7 @@ from pathlib import Path
 APP = Path(sys.argv[1]).expanduser()
 REPO = Path(__file__).resolve().parent / "mods"
 VERSION = sys.argv[2]
+MAIN = "main.js"
 
 
 def apply(text, hunks):
@@ -28,7 +29,7 @@ def apply(text, hunks):
     return text
 
 
-agents = (APP / "agents" / "main.js").read_text(encoding="utf-8").replace("\r\n", "\n")
+agents = (APP / "agents" / MAIN).read_text(encoding="utf-8").replace("\r\n", "\n")
 agents = apply(
     agents,
     [
@@ -111,9 +112,9 @@ agents = apply(
         ),
     ],
 )
-(REPO / "agents-bg" / "main.js").write_text(agents, encoding="utf-8")
+(REPO / "agents-bg" / MAIN).write_text(agents, encoding="utf-8")
 
-spaces = (APP / "spaces" / "main.js").read_text(encoding="utf-8").replace("\r\n", "\n")
+spaces = (APP / "spaces" / MAIN).read_text(encoding="utf-8").replace("\r\n", "\n")
 first = spaces.splitlines()[0]
 spaces = apply(
     spaces,
@@ -151,5 +152,5 @@ spaces = apply(
         ),
     ],
 )
-(REPO / "spaces-bg" / "main.js").write_text(spaces, encoding="utf-8")
+(REPO / "spaces-bg" / MAIN).write_text(spaces, encoding="utf-8")
 print("rebuilt from", VERSION)
