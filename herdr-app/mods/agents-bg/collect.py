@@ -28,17 +28,20 @@ MAX_FILE_BYTES = 65_536
 _RULE = re.compile(r"^─{10,}$")
 _ITEM = re.compile(r"^(\d+) (monitor|shell)s?$")
 _PLURAL = {"monitor": "monitors", "shell": "shells"}
-_SUBAGENT = re.compile(r"^\S \S+ {2,}.* · ↓ [\d.]+[kM]? tokens$")
+# Two spaces after the name; `.*` takes any further ones (no ` {2,}.*` backtracking).
+_SUBAGENT = re.compile(r"^\S \S+  .* · ↓ [\d.]+[kM]? tokens$")
 _SESSION_ID = re.compile(r"^[0-9A-Fa-f-]{36}$")
 
 
 def footer(screen):
+    """Lines below the last horizontal rule: Claude Code's footer and the subagent list."""
     lines = screen.splitlines()
     rules = [i for i, line in enumerate(lines) if _RULE.match(line.strip())]
     return lines[rules[-1] + 1 :] if rules else []
 
 
 def background_counts(lines):
+    """Monitors and shells named in the footer, by kind."""
     counts = {}
     for line in lines:
         for piece in re.split(r"[·,]", line):
@@ -50,6 +53,7 @@ def background_counts(lines):
 
 
 def describe(counts):
+    """The display text for background counts, e.g. '⧗ 1 monitor, 2 shells'."""
     if not counts:
         return None
     parts = [
@@ -59,6 +63,7 @@ def describe(counts):
 
 
 def model_abbrev(model_id):
+    """Family initial plus version digits: claude-opus-5-5 -> O55."""
     if not isinstance(model_id, str):
         return None
     parts = model_id.split("[", 1)[0].strip().lower().removeprefix("claude-").split("-")
@@ -75,6 +80,7 @@ def model_abbrev(model_id):
 
 
 def read_json(path):
+    """A JSON object from a file of at most 64 KiB, or None."""
     try:
         with open(path, "rb") as handle:
             raw = handle.read(MAX_FILE_BYTES + 1)
@@ -87,6 +93,7 @@ def read_json(path):
 
 
 def field(data, *path):
+    """A nested value by key path, or None where the path breaks."""
     for key in path:
         if not isinstance(data, dict):
             return None
@@ -95,6 +102,7 @@ def field(data, *path):
 
 
 def alive(pid):
+    """True if a process with this pid exists."""
     if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
         return False
     try:
@@ -107,6 +115,7 @@ def alive(pid):
 
 
 def hc_binary():
+    """The herdr-core CLI: on PATH, else ~/.local/bin/hc."""
     found = shutil.which("hc")
     if found:
         return found
@@ -115,6 +124,7 @@ def hc_binary():
 
 
 def hc(binary, *args):
+    """Run an hc subcommand with --json and return its parsed output."""
     result = subprocess.run(
         [binary, *args, "--json"],
         check=False,
@@ -130,6 +140,7 @@ def hc(binary, *args):
 
 
 def session_dirs():
+    """Where statusline snapshots and Claude Code's per-process files live."""
     cache = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
     claude = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
     return (
@@ -139,6 +150,7 @@ def session_dirs():
 
 
 def claude_details(binary, address, subagents):
+    """Subagents, Remote Control, model, effort and context use of one Claude Code terminal."""
     snapshots, processes = session_dirs()
     info = {"agents": subagents or None}
     pid = field(hc(binary, "get", address), "foreground", "pid")
@@ -158,6 +170,7 @@ def claude_details(binary, address, subagents):
 
 
 def collect():
+    """Details of every agent terminal on this machine, by terminal address."""
     binary = hc_binary()
     found = {}
     for terminal in hc(binary, "ls").get("terminals", []):
@@ -223,6 +236,7 @@ def proc_stat(pid):
 
 
 def run_json_lines(*argv):
+    """Stdout of a command, or None when it is missing, fails or times out."""
     try:
         result = subprocess.run(
             argv, check=False, capture_output=True, text=True, timeout=8
@@ -233,6 +247,7 @@ def run_json_lines(*argv):
 
 
 def git_toplevel(folder):
+    """The git checkout root of a folder, or an empty string."""
     out = run_json_lines("git", "-C", folder, "rev-parse", "--show-toplevel")
     return (out or "").strip()
 
@@ -312,6 +327,7 @@ def published_ports(spec_list):
 
 
 def docker_links():
+    """Docker containers with published ports, placed by their compose folder."""
     links = []
     out = run_json_lines("docker", "ps", "--format", "{{json .}}")
     for line in (out or "").splitlines():
@@ -343,6 +359,7 @@ def docker_links():
 
 
 def ddev_links():
+    """Running DDEV projects with their URL and project root."""
     out = run_json_lines("ddev", "list", "-j")
     try:
         projects = json.loads(out or "{}").get("raw") or []
@@ -361,6 +378,7 @@ def ddev_links():
 
 
 def is_wsl():
+    """True on a WSL kernel."""
     try:
         with open("/proc/sys/kernel/osrelease") as handle:
             release = handle.read().lower()
@@ -370,6 +388,7 @@ def is_wsl():
 
 
 def collect_ports():
+    """Services the sessions on this machine started, from all three sources."""
     binary = hc_binary()
     roots, agents = {}, {}
     for terminal in hc(binary, "ls").get("terminals", []):
@@ -390,6 +409,7 @@ def collect_ports():
 
 def main():
     # os.kill(pid, 0) terminates the process on Windows instead of probing it.
+    """Print the collector's JSON for the requested mode."""
     if os.name != "posix":
         print(json.dumps({"terminals": {}, "error": "unsupported platform"}))
         return

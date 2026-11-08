@@ -112,8 +112,11 @@ function poll(view, cx) {
 // { byAgent: { address: [link] }, bySpace: { spaceId: [link] } },
 // link = { key, text, url, title }.
 
-const HOME = /^\/(?:home\/[^/]+|Users\/[^/]+|root)?\/?$/;
-const isHome = (folder) => HOME.test(folder ?? "/");
+// "/", "/root", "/home/<user>" or "/Users/<user>", with or without a trailing slash.
+function isHome(folder) {
+  const parts = (folder ?? "/").split("/").filter(Boolean);
+  return parts.length === 0 || (parts.length === 1 && parts[0] === "root") || (parts.length === 2 && (parts[0] === "home" || parts[0] === "Users"));
+}
 const within = (path, folder) => path === folder || path.startsWith(`${folder.replace(/\/+$/, "")}/`);
 
 function pollPorts(view, cx) {

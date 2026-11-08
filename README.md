@@ -121,7 +121,7 @@ herdr-app check ~/.config/herdr-app/mods/spaces-bg
 herdr-app do layout.switch '{"name":"main-bg"}'
 ```
 
-`main-bg` is the shipped `main` layout with these two mods in place of `agents` and `spaces`; `ctrl-shift-l` switches back. The copies do not follow Herdr's updates of `agents`, `spaces` and `main`. They are taken from herdr-app 0.1.13 under the Apache License 2.0 (`herdr-app/LICENSE-APACHE`), and each `main.js` names what it changes.
+`main-bg` is the shipped `main` layout with these two mods in place of `agents` and `spaces`; `ctrl-shift-l` switches back. The copies do not follow Herdr's updates of `agents`, `spaces` and `main`. They are taken from herdr-app 0.1.14 under the Apache License 2.0 (`herdr-app/LICENSE-APACHE`), and every change in them is marked `bg-activity`. After a herdr-app update, `python3 herdr-app/sync_copies.py <app home>/mods <version>` rebuilds them from the shipped mods; it stops on a hunk whose surrounding code changed.
 
 Claude Code itself reports such an agent as `done` (its OSC 7501 status counts subagents and workflows as running work, not shells or monitors), so Herdr's sound, notification and tab status still say done; the mods change only what the lists show.
 

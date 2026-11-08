@@ -1,6 +1,7 @@
-// Copy of the Herdr app's shipped `agents` mod (herdr-app 0.1.13, Apache License 2.0,
-// see herdr-app/LICENSE-APACHE). Changed by netresearch/herdr-bg-activity: polling and
-// detail lines from ./bg.js, and a Background section for agents waiting on background work.
+// Copy of the Herdr app's shipped `agents` mod (herdr-app 0.1.14, Apache License 2.0,
+// see herdr-app/LICENSE-APACHE). Changed by netresearch/herdr-bg-activity: every
+// change is marked `bg-activity` - polling and detail lines from ./bg.js, and a
+// Background section for agents waiting on background work.
 // Agents in grouped or priority views; parents take their most urgent sub-agent's place.
 // A viewed done agent stays in Done until left.
 
@@ -66,8 +67,8 @@ const sortOf = () => SORTS.find((s) => s.id === shared("agents.sort")) ?? SORTS[
 // shells. That is not finished work, so it sits between Working and Idle.
 const RANK_BG = 1.5;
 const waitsOnBackground = (a) => (a.status === "idle" || a.status === "done") && Boolean(infoOf(a.address)?.bg);
-const SECTION = { 4: "Needs you", 3: "Done", 2: "Working", [RANK_BG]: "Background", 1: "Idle" };
-const SECTION_STATUS = { 4: "blocked", 3: "done", 2: "working", [RANK_BG]: "background" };
+const SECTION = { 4: "Needs you", 3: "Done", 2: "Working", [RANK_BG]: "Background", 1: "Idle" }; // bg-activity
+const SECTION_STATUS = { 4: "blocked", 3: "done", 2: "working", [RANK_BG]: "background" }; // bg-activity
 
 function duration(ms) {
   const m = Math.floor(ms / 60000);
@@ -86,7 +87,7 @@ function icon(p, size, color) {
 export default class Agents extends View {
   init(_props, cx) {
     if (props()?.sortMenu) return;
-    startPolling(this, cx);
+    startPolling(this, cx); // bg-activity
     this.folded = new Set();
     // Each agent's last state and when it changed (ms), kept across restarts.
     this.changed = JSON.parse(localStorage.getItem("changed") ?? "{}");
@@ -147,7 +148,7 @@ export default class Agents extends View {
   }
 
   rank(a) {
-    if (waitsOnBackground(a)) return RANK_BG;
+    if (waitsOnBackground(a)) return RANK_BG; // bg-activity
     const sawDone = a.address === this.held?.address && this.held.rank === RANK.done && a.status === "idle";
     return sawDone ? RANK.done : RANK[a.status] ?? 0;
   }
@@ -213,7 +214,7 @@ export default class Agents extends View {
       .text_size(12.5)
       .when(on, (el) => el.bg(t.raised))
       .hover((s) => s.bg(t.hover))
-      .on_click(() => this.peek(k.address))
+      .on_click(() => (this.listed.has(k.address) ? run("pane.focus", { terminal: k.address }) : this.peek(k.address)))
       .children(s.lines.map(l => div().self_start().mt(-4).w(9).h(17).mr(4).flex_none()
         .when(Boolean(l), el => el.border_l(1.5).border_color(t.input))
         .when(l === "└" || l === "├", el => el.border_b(1.5).rounded_bl(6))))
@@ -224,6 +225,7 @@ export default class Agents extends View {
 
   // compact: a ! for blocked where a header already says "Needs you".
   status(t, a, compact = false) {
+    // bg-activity: an hourglass for an agent waiting on background work.
     if (a.status === "background" || (a.address && waitsOnBackground(a))) return div().w(14).flex_none().text_center().text_size(11).text_color(t.ansi3).child("⧗");
     const color = t[a.status] ?? t.dim;
     if (a.status === "working") return svg("mods/workspace-chrome/spinner.svg").size(12).mx(1).flex_none().text_color(t.working).spin(900);
@@ -247,6 +249,12 @@ export default class Agents extends View {
     const now = Date.now();
     this.track(list, now);
     this.hold(list);
+    // A kept sub-agent (one with a pane) is in agents() too: where a tree shows
+    // it, it gets no row of its own, unless it's pinned.
+    const nested = new Set(collapsed ? [] : list.flatMap((a) => this.tree(all, a.address).map((s) => s.t.address)));
+    list = list.filter((a) => a.pinned || !nested.has(a.address));
+    const tabCounts = new Map();
+    for (const a of list) tabCounts.set(a.tab, (tabCounts.get(a.tab) ?? 0) + 1);
     const byPriority = sort.id === "priority";
     const urgency = new Map(list.map((a) => [a.address, Math.max(this.rank(a), ...this.tree(all, a.address).map((s) => RANK[kidStatus(s.t, this.listed)] ?? 0))]));
     const rankOf = (a) => urgency.get(a.address);
@@ -259,7 +267,7 @@ export default class Agents extends View {
     const withKids = (a, i) => {
       const subs = collapsed ? [] : this.tree(all, a.address);
       const r = row(a, i, subs);
-      // Aligned with the name: row padding 8 + icon 16 + gap 9.
+      // bg-activity: the detail line under the row, aligned with the name (padding 8 + icon 16 + gap 9).
       const d = collapsed ? null : detailLine(t, a, 33);
       const head = d ? [r, d] : [r];
       if (this.folded.has(a.address)) return head;
@@ -297,8 +305,12 @@ export default class Agents extends View {
     // otherwise read the same.
     // Read the pane snapshot once: every host read copies the whole list into JS.
     const leads = leadPanes(panes());
-    const tabLabels = new Map(spaces().flatMap(s => s.tabs).map(tab => [tab.id, title(tab, leads.get(tab.id))]));
-    const labels = new Map(list.map(a => [a.address, tabLabels.get(a.tab) ?? (a.title || a.program?.name || "")]));
+    const tabs = new Map(spaces().flatMap(s => s.tabs).map(tab => [tab.id, tab]));
+    const labels = new Map(list.map(a => {
+      const tab = tabs.get(a.tab);
+      const many = tabCounts.get(a.tab) > 1;
+      return [a.address, tab ? title(many ? { ...tab, named: false } : tab, many ? a : leads.get(a.tab)) : (a.title || a.program?.name || "")];
+    }));
     const label = (a) => labels.get(a.address);
     const detail = new Map(list.map(a => [a.address, /^\d+$/.test(label(a)) ? null : label(a)]));
     const seen = {};
@@ -412,7 +424,7 @@ export default class Agents extends View {
           open ? this.folded.add(g.id) : this.folded.delete(g.id);
           cx.notify();
         })
-        .child(div().truncate().text_color(g.status === "background" ? t.ansi3 : t[g.status] ?? t.dim).child(g.label))
+        .child(div().truncate().text_color(g.status === "background" ? t.ansi3 : t[g.status] ?? t.dim).child(g.label)) // bg-activity
         .when(byPriority || !open, (el) => el.child(div().text_color(t.dim).child(String(g.members.length))))
         .child(div().flex_1())
         .when(!open, (el) => el
@@ -447,7 +459,7 @@ export default class Agents extends View {
                 .text_size(11)
                 .text_color(t.dim)
                 .hover((s) => s.text_color(t.foreground))
-                .on_click(() => openOverlay({ mod: "agents-bg", kind: "popup", width: 200, height: 140, props: { sortMenu: true } }))
+                .on_click(() => openOverlay({ mod: "agents-bg", kind: "popup", width: 200, height: 140, props: { sortMenu: true } })) // bg-activity: the copy's own name
                 .tooltip(`Sort agents: ${sort.label}`)
                 .child(svg(`mods/workspace-chrome/${sort.icon}.svg`).size(14)),
             ),
