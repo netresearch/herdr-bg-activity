@@ -76,8 +76,8 @@ agents = apply(
         (
             "    const st = kidStatus(k, this.listed);\n",
             (
-                "    const raw = kidStatus(k, this.listed);\n"
                 "    // bg-activity: a waiting sub-agent that still owns background work.\n"
+                "    const raw = kidStatus(k, this.listed);\n"
                 '    const st = raw === "idle" && infoOf(k.address)?.bg ? "background" : raw;\n'
             ),
         ),
@@ -112,7 +112,6 @@ agents = apply(
         ),
     ],
 )
-(REPO / "agents-bg" / MAIN).write_text(agents, encoding="utf-8")
 
 spaces = (APP / "spaces" / MAIN).read_text(encoding="utf-8").replace("\r\n", "\n")
 first = spaces.splitlines()[0]
@@ -152,5 +151,8 @@ spaces = apply(
         ),
     ],
 )
-(REPO / "spaces-bg" / MAIN).write_text(spaces, encoding="utf-8")
+# Both copies are written only after every hunk of both matched, and always with
+# LF line endings, so a Windows Python produces the same bytes.
+(REPO / "agents-bg" / MAIN).write_text(agents, encoding="utf-8", newline="\n")
+(REPO / "spaces-bg" / MAIN).write_text(spaces, encoding="utf-8", newline="\n")
 print("rebuilt from", VERSION)

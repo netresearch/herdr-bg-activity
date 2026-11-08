@@ -197,8 +197,8 @@ export default class Agents extends View {
 
   subRow(t, s, shown, compact) {
     const k = s.t;
-    const raw = kidStatus(k, this.listed);
     // bg-activity: a waiting sub-agent that still owns background work.
+    const raw = kidStatus(k, this.listed);
     const st = raw === "idle" && infoOf(k.address)?.bg ? "background" : raw;
     const pic = icon(k.program, 14, t.foreground);
     const on = k.address === shown;
