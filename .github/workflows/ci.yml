@@ -20,3 +20,14 @@ jobs:
       install-cmd: "python -m pip install --upgrade pip && pip install ruff"
       lint-cmd: "ruff check --no-fix . && ruff format --check ."
       test-cmd: "python -m unittest discover -s tests -v"
+
+  # The Herdr app mods' JavaScript (herdr-app/mods/*/bg.js); no dependencies to install.
+  herdr-app-js:
+    uses: netresearch/.github/.github/workflows/node-test.yml@main
+    permissions:
+      contents: read
+    with:
+      package-manager: npm
+      node-version: "24"
+      install-cmd: "true"
+      test-cmd: "node --import ./tests/js/register.mjs --test 'tests/js/*.test.mjs'"

@@ -27,6 +27,7 @@ A herdr plugin that marks agent panes idle at the prompt while a monitor or back
 
 ```bash
 python3 -m unittest discover -s tests   # tests
+node --import ./tests/js/register.mjs --test 'tests/js/*.test.mjs'   # herdr-app mod tests (Node 22+)
 ruff format --check . && ruff check .   # format and lint, as CI runs them
 pre-commit run --all-files              # all local hooks
 HERDR_SOCKET_PATH=~/.config/herdr/herdr.sock python3 herdr_bg_activity.py  # run against a live server
@@ -34,7 +35,7 @@ HERDR_SOCKET_PATH=~/.config/herdr/herdr.sock python3 herdr_bg_activity.py  # run
 
 ## Testing
 
-Tests live in `tests/` and use `unittest` with fakes from `tests/fakes.py`; no network or herdr server needed. CI (`.github/workflows/ci.yml`) runs them on Python 3.10 and 3.14, Linux and macOS.
+Tests live in `tests/` and use `unittest` with fakes from `tests/fakes.py`; no network or herdr server needed. CI (`.github/workflows/ci.yml`) runs them on Python 3.10 and 3.14, Linux and macOS. The herdr-app mods' JavaScript is tested in `tests/js/` with `node:test`; `tests/js/hooks.mjs` resolves the app-only modules `gpui-kit`, `gpui-base` and `herdr` to the stubs in `tests/js/stubs/`, and CI runs them on Node 24.
 
 ## Development Workflow
 
