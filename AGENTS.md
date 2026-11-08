@@ -21,6 +21,7 @@ A herdr plugin that marks agent panes idle at the prompt while a monitor or back
 - Remote Control comes from Claude Code's `~/.claude/sessions/<pid>.json` (`bridgeSessionId` set, pid alive). The statusline input's `remote` field is not Remote Control: it stayed unset in a session registered for it (measured on Claude Code 2.1.270).
 - Context use is published under one of three keys (`ctx`, `ctx_warn`, `ctx_crit`) because herdr's numeric sidebar rules parse the whole value and `67%` is not a number.
 - Only `pane_not_found` / `workspace_not_found` count as a vanished target; every other error reaches `run()`, which logs it and keeps polling.
+- `herdr-app/` is the Herdr desktop app port (mods, not a herdr plugin). `mods/agents-bg/collect.py` repeats the footer parsing above, because the mod runs it as `python3 -c <source>` on a remote machine and cannot import this module; change both together. `mods/agents-bg/main.js` and `mods/spaces-bg/main.js` are copies of the app's shipped mods (Apache-2.0); keep their header notice and confine changes to `bg-activity`-marked lines and `bg.js`. They are generated: change a hunk in `herdr-app/sync_copies.py` and rerun it (`python3 herdr-app/sync_copies.py <app home>/mods <version>`) rather than editing the copies. Check them with `herdr-app check herdr-app/mods/<name>`.
 
 ## Commands
 
