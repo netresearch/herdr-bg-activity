@@ -76,7 +76,6 @@ class ProcessLinksTest(unittest.TestCase):
         self.assertEqual(len(links), 1)
         self.assertEqual(links[0]["terminal"], "t3")
         self.assertEqual(links[0]["port"], 5175)
-        self.assertTrue(links[0]["loopback"])
         self.assertEqual(links[0]["root"], "/p/app")
 
     def test_mcp_server_of_the_agent_is_left_out(self):
@@ -85,7 +84,7 @@ class ProcessLinksTest(unittest.TestCase):
     def test_unrelated_process_has_no_terminal_but_a_root(self):
         links = self.links(ss_line("0.0.0.0:8080", "go", 70))
         self.assertIsNone(links[0]["terminal"])
-        self.assertFalse(links[0]["loopback"])
+        self.assertEqual(links[0]["port"], 8080)
 
     def test_ephemeral_and_foreign_addresses_are_left_out(self):
         out = "\n".join(
@@ -121,7 +120,6 @@ class DockerAndDdevTest(unittest.TestCase):
                 {
                     "kind": "docker",
                     "port": 8080,
-                    "loopback": False,
                     "label": "web",
                     "cwd": "/p/app",
                 }

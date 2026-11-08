@@ -39,17 +39,31 @@ function publish(key, value) {
   if (JSON.stringify(value) !== JSON.stringify(shared(key) ?? {})) setShared(key, value);
 }
 
-// collect.py's JSON from one machine, or null when it can't run there.
+// collect.py's JSON from one machine, or null when this round failed there: python3
+// missing, the machine unreachable, a non-zero exit, or an error collect.py reports
+// itself (exec does not reject on a non-zero exit).
 async function collectOn(script, machine, args) {
+  const where = machine ?? "local";
   try {
     const r = await execFile("python3", ["-c", script, ...args], { on: machine });
-    const out = JSON.parse(r.stdout || "{}");
-    if (out.error) console.log(`bg-activity ${machine ?? "local"}: ${out.error}`);
-    return out;
+    const out = r.code === 0 ? JSON.parse(r.stdout || "{}") : { error: r.stderr.trim() || `exit ${r.code}` };
+    if (!out.error) return out;
+    console.log(`bg-activity ${where}: ${out.error}`);
   } catch (e) {
-    console.log(`bg-activity ${machine ?? "local"}: ${e?.message ?? e}`);
-    return null;
+    console.log(`bg-activity ${where}: ${e?.message ?? e}`);
   }
+  return null;
+}
+
+// A machine that fails this many rounds in a row shows nothing any more: its last
+// result would be stale, and its links would lead nowhere.
+const MAX_FAILED_ROUNDS = 3;
+
+// Counts failed rounds per machine; true while the last result may still be shown.
+function keepLast(failures, machine, failed) {
+  const n = failed ? (failures.get(machine) ?? 0) + 1 : 0;
+  failures.set(machine, n);
+  return failed && n < MAX_FAILED_ROUNDS;
 }
 
 // Starts polling for one mod copy. State lives on `view`; no cx is kept.
@@ -57,6 +71,8 @@ export function startPolling(view, cx) {
   view.bgBusy = false;
   view.portsBusy = false;
   view.portsFound = new Map(); // machine -> its last services
+  view.bgFailures = new Map(); // machine -> failed rounds in a row
+  view.portsFailures = new Map();
   cx.spawn(async (cx) => {
     view.bgScript = await readTextFile(`${appHome()}/mods/agents-bg/collect.py`);
     poll(view, cx);
@@ -76,10 +92,13 @@ function poll(view, cx) {
     const previous = shared(SHARED_KEY) ?? {};
     machines.forEach((machine, i) => {
       if (!results[i]) {
-        // Failed this round: keep what it showed, rather than blank it for one poll.
-        for (const [addr, v] of Object.entries(previous)) if (machineOf(addr) === machine) info[addr] = v;
+        // Failed: keep what it showed for a few rounds rather than blank it at once.
+        if (keepLast(view.bgFailures, machine, true)) {
+          for (const [addr, v] of Object.entries(previous)) if (machineOf(addr) === machine) info[addr] = v;
+        }
         return;
       }
+      keepLast(view.bgFailures, machine, false);
       for (const [addr, v] of Object.entries(results[i].terminals ?? {})) info[machine ? `${machine}/${addr}` : addr] = v;
     });
     view.bgBusy = false;
@@ -104,8 +123,12 @@ function pollPorts(view, cx) {
   cx.spawn(async () => {
     const results = await Promise.all(machines.map((m) => collectOn(view.bgScript, m, ["ports"])));
     machines.forEach((machine, i) => {
-      // Failed this round: keep its last list, rather than blank its links for one poll.
-      if (!results[i]) return;
+      // Failed: keep its last list for a few rounds rather than blank its links at once.
+      if (!results[i]) {
+        if (!keepLast(view.portsFailures, machine, true)) view.portsFound.delete(machine);
+        return;
+      }
+      keepLast(view.portsFailures, machine, false);
       // Only this computer's services, and a WSL machine's behind a Windows app (they
       // reach it as localhost), can be opened here. Another machine's name is no
       // hostname this computer can resolve, so its services get no link.
@@ -130,7 +153,9 @@ function urlOf(l) {
 // the project, such as ~/projects, does not claim it: that would hand it every service.
 function paneOf(l, ps, agentSet) {
   const prefix = l.machine ? `${l.machine}/` : "";
-  if (l.terminal) return ps.find((p) => p.terminal === prefix + l.terminal) ?? null;
+  // A terminal without a pane in this app (opened elsewhere) falls back to the folder.
+  const own = l.terminal ? ps.find((p) => p.terminal === prefix + l.terminal) : null;
+  if (own) return own;
   const root = l.root ?? l.cwd;
   if (!root || isHome(root)) return null;
   // Same machine: a remote pane's terminal carries the machine prefix, a local one none.

@@ -200,8 +200,7 @@ def collect():
 
 SHELLS = {"bash", "sh", "zsh", "fish", "dash", "ksh"}
 AGENT_PROGRAMS = {"claude", "codex", "opencode", "pi", "hermes", "herdr", "herdr-core"}
-LOOPBACK = {"127.0.0.1", "::1", "[::1]"}
-OPENABLE = {"0.0.0.0", "*", "::", "[::]", *LOOPBACK}
+OPENABLE = {"0.0.0.0", "*", "::", "[::]", "127.0.0.1", "::1", "[::1]"}
 EPHEMERAL_PORTS = 32768
 MAX_ANCESTRY = 64
 _SS_USER = re.compile(r'\("([^"]*)",pid=(\d+)')
@@ -291,7 +290,6 @@ def process_links(roots, agents):
             {
                 "kind": "process",
                 "port": port,
-                "loopback": host in LOOPBACK,
                 "label": name,
                 "terminal": terminal,
                 "cwd": cwd,
@@ -303,14 +301,14 @@ def process_links(roots, agents):
 
 
 def published_ports(spec_list):
-    """Host port -> bound to loopback only. IPv4 and IPv6 binds of one port are one."""
-    ports = {}
+    """Host ports a container publishes on an openable address, once each (an IPv4
+    and an IPv6 bind of one port are one link)."""
+    ports = set()
     for spec in spec_list.split(","):
         match = _DOCKER_PORT.match(spec.strip())
         if match and match.group(1) in OPENABLE:
-            port = int(match.group(2))
-            ports[port] = ports.get(port, True) and match.group(1) in LOOPBACK
-    return ports
+            ports.add(int(match.group(2)))
+    return sorted(ports)
 
 
 def docker_links():
@@ -332,12 +330,11 @@ def docker_links():
             continue
         service = labels.get("com.docker.compose.service") or box.get("Names", "")
         folder = labels.get("com.docker.compose.project.working_dir")
-        for port, loopback in sorted(published_ports(box.get("Ports", "")).items()):
+        for port in published_ports(box.get("Ports", "")):
             links.append(
                 {
                     "kind": "docker",
                     "port": port,
-                    "loopback": loopback,
                     "label": service,
                     "cwd": folder,
                 }
