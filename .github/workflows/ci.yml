@@ -30,4 +30,4 @@ jobs:
       package-manager: npm
       node-version: "24"
       install-cmd: "true"
-      test-cmd: "node --import ./tests/js/register.mjs --test tests/js/"
+      test-cmd: "node --import ./tests/js/register.mjs --test 'tests/js/*.test.mjs'"

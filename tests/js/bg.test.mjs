@@ -1,6 +1,7 @@
 // Tests for herdr-app/mods/agents-bg/bg.js and spaces-bg/bg.js, the mod logic that
 // places service links and spots agents waiting on background work. Run with
-//   node --import ./tests/js/register.mjs --test tests/js/
+//   node --import ./tests/js/register.mjs --test 'tests/js/*.test.mjs'
+// (a glob, not the directory: Node 24 rejects a directory with ERR_UNSUPPORTED_DIR_IMPORT)
 
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
