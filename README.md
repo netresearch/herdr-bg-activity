@@ -96,6 +96,35 @@ rows = [
 
 A file lock in `$XDG_RUNTIME_DIR` — or, where that names no existing directory, in `${XDG_CACHE_HOME:-~/.cache}/herdr-bg-activity/` — keeps one instance per herdr session; a new instance waits until the previous one exits.
 
+## Herdr app
+
+The Herdr desktop app has no herdr plugins; it is extended with mods. `herdr-app/` holds the same features for it, plus links to the services your sessions start:
+
+- **Agents list** (`agents-bg`, a copy of the shipped `agents` mod): a detail line under each agent with model, effort, subagents, context use, Remote Control and background work (`⧗ 1 shell`). An agent that waits at the prompt while it still owns background work is listed under **Background**, not **Done**.
+- **Spaces list** (`spaces-bg`, a copy of the shipped `spaces` mod): agent symbols and the number of background tasks after each space name.
+- **Service links** in both lists, opened in the browser on click:
+  - a TCP listener whose process descends from a terminal's shell (below a coding agent only through a shell, so its MCP servers are left out), as `:5173` → `http://localhost:5173`;
+  - a Docker container with a published port, placed by its compose working folder;
+  - a running DDEV project, as its primary URL.
+
+  A service without such a parent goes to a pane that works inside its project (git root, compose folder or DDEV root).
+
+`agents-bg/collect.py` does the work: the mod runs it with `python3 -c` on each machine that holds agents, through herdr-core. It needs `python3`, `hc`, `ss`, and optionally `docker` and `ddev` there; it does not run on Windows. A WSL machine's ports open as `localhost` from an app on Windows (WSL's localhost forwarding). Model, effort and context need the statusline snapshot above.
+
+Install, with the app's home at `~/.config/herdr-app` (on Windows `%USERPROFILE%\.config\herdr-app`):
+
+```sh
+cp -R herdr-app/mods/agents-bg herdr-app/mods/spaces-bg ~/.config/herdr-app/mods/
+cp herdr-app/layouts/main-bg.json ~/.config/herdr-app/layouts/
+herdr-app check ~/.config/herdr-app/mods/agents-bg
+herdr-app check ~/.config/herdr-app/mods/spaces-bg
+herdr-app do layout.switch '{"name":"main-bg"}'
+```
+
+`main-bg` is the shipped `main` layout with these two mods in place of `agents` and `spaces`; `ctrl-shift-l` switches back. The copies do not follow Herdr's updates of `agents`, `spaces` and `main`. They are taken from herdr-app 0.1.13 under the Apache License 2.0 (`herdr-app/LICENSE-APACHE`), and each `main.js` names what it changes.
+
+Claude Code itself reports such an agent as `done` (its OSC 7501 status counts subagents and workflows as running work, not shells or monitors), so Herdr's sound, notification and tab status still say done; the mods change only what the lists show.
+
 ## Verify a release download
 
 Each GitHub Release carries the tagged source archive, `SHA256SUMS.txt`, and SLSA build provenance for both:
