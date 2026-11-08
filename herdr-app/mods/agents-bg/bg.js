@@ -237,6 +237,7 @@ export function detailLine(t, a, indent) {
   if (d.bg) parts.push(div().id(`bg-${a.address}`).min_w(0).truncate().text_color(t.ansi3).child(d.bg));
   parts.push(...linkChips(t, agentLinks(a.address), a.address));
   if (!parts.length) return null;
-  // Wraps when the links don't fit on one line.
-  return h_flex().id(`detail-${a.address}`).pl(indent).pr(8).mt(-6).pb(2).min_h(20).flex_none().flex_wrap().gap_x(6).gap_y(1).items_center().text_size(11.5).children(parts);
+  // Wraps when the links don't fit on one line. No negative top margin to tuck it under
+  // the row: the agents list then measures its content too short and shows no scrollbar.
+  return h_flex().id(`detail-${a.address}`).pl(indent).pr(8).pb(4).min_h(18).flex_none().flex_wrap().gap_x(6).gap_y(1).items_center().text_size(11.5).children(parts);
 }
