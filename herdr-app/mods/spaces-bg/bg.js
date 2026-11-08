@@ -12,7 +12,7 @@ const LINKS_KEY = "bg-activity.links";
 const SYMBOL = { claude: "✻", "claude-code": "✻", pi: "π" };
 
 // "⧗ 1 monitor, 2 shells" -> 3: the leading number of each comma-separated part.
-function bgCount(bg) {
+export function bgCount(bg) {
   if (!bg) return 0;
   return bg.replace("⧗", "").split(",").reduce((n, part) => n + (Number.parseInt(part.trim(), 10) || 0), 0);
 }

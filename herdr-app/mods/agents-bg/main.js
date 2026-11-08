@@ -9,7 +9,7 @@ import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, window, layout } from "herdr";
 // bg-activity: details under each agent, and agents waiting on background work in their own section.
-import { startPolling, detailLine, infoOf } from "./bg.js";
+import { startPolling, detailLine, infoOf, waitsOnBackground } from "./bg.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -63,10 +63,8 @@ const SORTS = [
   { id: "grouped", label: "Grouped by space", icon: "layers" },
 ];
 const sortOf = () => SORTS.find((s) => s.id === shared("agents.sort")) ?? SORTS[0];
-// bg-activity: at the prompt (idle or done) but still owning monitors or background
-// shells. That is not finished work, so it sits between Working and Idle.
+// bg-activity: agents waiting on background work (bg.js) sit between Working and Idle.
 const RANK_BG = 1.5;
-const waitsOnBackground = (a) => (a.status === "idle" || a.status === "done") && Boolean(infoOf(a.address)?.bg);
 const SECTION = { 4: "Needs you", 3: "Done", 2: "Working", [RANK_BG]: "Background", 1: "Idle" }; // bg-activity
 const SECTION_STATUS = { 4: "blocked", 3: "done", 2: "working", [RANK_BG]: "background" }; // bg-activity
 

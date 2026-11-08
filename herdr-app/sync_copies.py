@@ -48,7 +48,7 @@ agents = apply(
             (
                 'props, window, layout } from "herdr";\n'
                 "// bg-activity: details under each agent, and agents waiting on background work in their own section.\n"
-                'import { startPolling, detailLine, infoOf } from "./bg.js";\n'
+                'import { startPolling, detailLine, infoOf, waitsOnBackground } from "./bg.js";\n'
             ),
         ),
         (
@@ -57,10 +57,8 @@ agents = apply(
                 'const SECTION_STATUS = { 4: "blocked", 3: "done", 2: "working" };\n'
             ),
             (
-                "// bg-activity: at the prompt (idle or done) but still owning monitors or background\n"
-                "// shells. That is not finished work, so it sits between Working and Idle.\n"
+                "// bg-activity: agents waiting on background work (bg.js) sit between Working and Idle.\n"
                 "const RANK_BG = 1.5;\n"
-                'const waitsOnBackground = (a) => (a.status === "idle" || a.status === "done") && Boolean(infoOf(a.address)?.bg);\n'
                 'const SECTION = { 4: "Needs you", 3: "Done", 2: "Working", [RANK_BG]: "Background", 1: "Idle" }; // bg-activity\n'
                 'const SECTION_STATUS = { 4: "blocked", 3: "done", 2: "working", [RANK_BG]: "background" }; // bg-activity\n'
             ),

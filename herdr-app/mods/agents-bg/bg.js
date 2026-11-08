@@ -32,6 +32,10 @@ const onWindows = () => window()?.platform === "windows";
 const usable = (machines) => [...new Set(machines)].filter((m) => m !== null || !onWindows());
 
 export const infoOf = (address) => shared(SHARED_KEY)?.[address] ?? null;
+
+// At the prompt (idle or done) but still owning monitors or background shells: not
+// finished work, so the agents list shows it under Background instead of Done.
+export const waitsOnBackground = (a) => (a.status === "idle" || a.status === "done") && Boolean(infoOf(a.address)?.bg);
 export const agentLinks = (address) => shared(LINKS_KEY)?.byAgent?.[address] ?? [];
 
 // Setting shared state redraws every mod, so only on a change.
@@ -42,7 +46,7 @@ function publish(key, value) {
 // collect.py's JSON from one machine, or null when this round failed there: python3
 // missing, the machine unreachable, a non-zero exit, or an error collect.py reports
 // itself (exec does not reject on a non-zero exit).
-async function collectOn(script, machine, args) {
+export async function collectOn(script, machine, args) {
   const where = machine ?? "local";
   try {
     const r = await execFile("python3", ["-c", script, ...args], { on: machine });
@@ -60,7 +64,7 @@ async function collectOn(script, machine, args) {
 const MAX_FAILED_ROUNDS = 3;
 
 // Counts failed rounds per machine; true while the last result may still be shown.
-function keepLast(failures, machine, failed) {
+export function keepLast(failures, machine, failed) {
   const n = failed ? (failures.get(machine) ?? 0) + 1 : 0;
   failures.set(machine, n);
   return failed && n < MAX_FAILED_ROUNDS;
@@ -113,12 +117,12 @@ function poll(view, cx) {
 // link = { key, text, url, title }.
 
 // "/", "/root", "/home/<user>" or "/Users/<user>", with or without a trailing slash.
-function isHome(folder) {
+export function isHome(folder) {
   const parts = (folder ?? "/").split("/").filter(Boolean);
   return parts.length === 0 || (parts.length === 1 && parts[0] === "root") || (parts.length === 2 && (parts[0] === "home" || parts[0] === "Users"));
 }
 // True if `path` is `folder` or inside it; a trailing slash on `folder` is ignored.
-function within(path, folder) {
+export function within(path, folder) {
   let end = folder.length;
   while (end > 1 && folder[end - 1] === "/") end--;
   const base = folder.slice(0, end);
@@ -152,7 +156,7 @@ function pollPorts(view, cx) {
 
 // What this computer opens for a service: the DDEV URL, else localhost and the port.
 // Only http(s) URLs, so a link can never start another program.
-function urlOf(l) {
+export function urlOf(l) {
   const url = l.url ?? `http://localhost:${l.port}`;
   return /^https?:\/\//.test(url) ? url : null;
 }
@@ -160,7 +164,7 @@ function urlOf(l) {
 // The pane a service belongs to: the terminal it descends from, else a pane working
 // inside its project (git root, compose folder, DDEV root). A pane in a folder above
 // the project, such as ~/projects, does not claim it: that would hand it every service.
-function paneOf(l, ps, agentSet) {
+export function paneOf(l, ps, agentSet) {
   const prefix = l.machine ? `${l.machine}/` : "";
   // A terminal without a pane in this app (opened elsewhere) falls back to the folder.
   const own = l.terminal ? ps.find((p) => p.terminal === prefix + l.terminal) : null;
@@ -175,7 +179,7 @@ function paneOf(l, ps, agentSet) {
   return inside.sort((a, b) => score(b) - score(a))[0] ?? null;
 }
 
-function linkOf(l, url) {
+export function linkOf(l, url) {
   return {
     key: `${l.kind}:${l.port ?? l.url}`,
     text: l.kind === "ddev" ? `${l.label} ↗` : `:${l.port}`,
@@ -184,7 +188,7 @@ function linkOf(l, url) {
   };
 }
 
-function place(found) {
+export function place(found) {
   const ps = panes().filter((p) => p.terminal);
   const tabSpace = new Map(spaces().flatMap((s) => s.tabs.map((t) => [t.id, s.id])));
   const agentSet = new Set(agents().map((a) => a.address));
