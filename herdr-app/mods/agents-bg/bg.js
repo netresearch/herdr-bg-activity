@@ -188,6 +188,9 @@ function linkOf(l, url) {
   };
 }
 
+// Sorts found listeners into links per agent and per space: a link goes to its owning
+// pane's space, and to that pane's agent if it has one. A listener without an http(s)
+// URL or an owning pane is dropped.
 export function place(found) {
   const ps = panes().filter((p) => p.terminal);
   const tabSpace = new Map(spaces().flatMap((s) => s.tabs.map((t) => [t.id, s.id])));

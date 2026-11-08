@@ -10,6 +10,7 @@ export const state = {
   runProgram: async () => ({ code: 0, stdout: "{}", stderr: "" }),
 };
 
+// Puts `state` back to an empty app on Windows whose runner returns `{}`; call before each test.
 export function reset() {
   Object.assign(state, { agents: [], panes: [], spaces: [], shared: {}, platform: "windows" });
   state.runProgram = async () => ({ code: 0, stdout: "{}", stderr: "" });

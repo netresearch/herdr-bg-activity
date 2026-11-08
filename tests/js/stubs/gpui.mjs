@@ -2,6 +2,7 @@
 // is recorded, so a test can read what a mod rendered (ids, text, click handlers).
 // The record lives under `$calls` and `$kids`, names no builder method uses.
 
+// One recording element of the given kind; `when(cond, fn)` runs fn only if cond holds.
 function element(kind) {
   const el = { $kind: kind, $calls: [], $kids: [] };
   const proxy = new Proxy(el, {
