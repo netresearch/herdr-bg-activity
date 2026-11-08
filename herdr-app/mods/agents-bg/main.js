@@ -9,7 +9,7 @@ import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, window, layout } from "herdr";
 // bg-activity: details under each agent, and agents waiting on background work in their own section.
-import { startPolling, detailLine, infoOf, waitsOnBackground } from "./bg.js";
+import { startPolling, detailLine, waitsOnBackground } from "./bg.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -197,7 +197,7 @@ export default class Agents extends View {
     const k = s.t;
     // bg-activity: a waiting sub-agent that still owns background work.
     const raw = kidStatus(k, this.listed);
-    const st = raw === "idle" && infoOf(k.address)?.bg ? "background" : raw;
+    const st = waitsOnBackground({ status: raw, address: k.address }) ? "background" : raw;
     const pic = icon(k.program, 14, t.foreground);
     const on = k.address === shown;
     return h_flex()

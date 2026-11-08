@@ -48,7 +48,7 @@ agents = apply(
             (
                 'props, window, layout } from "herdr";\n'
                 "// bg-activity: details under each agent, and agents waiting on background work in their own section.\n"
-                'import { startPolling, detailLine, infoOf, waitsOnBackground } from "./bg.js";\n'
+                'import { startPolling, detailLine, waitsOnBackground } from "./bg.js";\n'
             ),
         ),
         (
@@ -76,7 +76,7 @@ agents = apply(
             (
                 "    // bg-activity: a waiting sub-agent that still owns background work.\n"
                 "    const raw = kidStatus(k, this.listed);\n"
-                '    const st = raw === "idle" && infoOf(k.address)?.bg ? "background" : raw;\n'
+                '    const st = waitsOnBackground({ status: raw, address: k.address }) ? "background" : raw;\n'
             ),
         ),
         (

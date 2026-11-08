@@ -34,7 +34,7 @@ const usable = (machines) => [...new Set(machines)].filter((m) => m !== null || 
 export const infoOf = (address) => shared(SHARED_KEY)?.[address] ?? null;
 
 // At the prompt (idle or done) but still owning monitors or background shells: not
-// finished work, so the agents list shows it under Background instead of Done.
+// finished work, so the agents list shows it under Background instead of Idle or Done.
 export const waitsOnBackground = (a) => (a.status === "idle" || a.status === "done") && Boolean(infoOf(a.address)?.bg);
 export const agentLinks = (address) => shared(LINKS_KEY)?.byAgent?.[address] ?? [];
 
@@ -179,7 +179,7 @@ export function paneOf(l, ps, agentSet) {
   return inside.sort((a, b) => score(b) - score(a))[0] ?? null;
 }
 
-export function linkOf(l, url) {
+function linkOf(l, url) {
   return {
     key: `${l.kind}:${l.port ?? l.url}`,
     text: l.kind === "ddev" ? `${l.label} ↗` : `:${l.port}`,
