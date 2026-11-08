@@ -24,7 +24,12 @@ export const h_flex = () => element("h_flex");
 export const v_flex = () => element("v_flex");
 export const svg = () => element("svg");
 export const image = () => element("image");
-export class View {}
+// The base class mods extend; tests call their methods directly, nothing renders.
+export class View {
+  render() {
+    return null;
+  }
+}
 
 // The first argument of the last call to `method` on an element, or undefined.
 export function arg(el, method) {
