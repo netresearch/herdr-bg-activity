@@ -109,7 +109,7 @@ The Herdr desktop app has no herdr plugins; it is extended with mods. `herdr-app
 
   A service without such a parent goes to a pane that works inside its project (git root, compose folder or DDEV root).
 
-`agents-bg/collect.py` does the work: the mod runs it with `python3 -c` on each machine that holds agents, through herdr-core. It needs `python3`, `hc`, `ss`, and optionally `docker` and `ddev` there; it does not run on Windows. A WSL machine's ports open as `localhost` from an app on Windows (WSL's localhost forwarding). Model, effort and context need the statusline snapshot above.
+`agents-bg/collect.py` does the work: the mod runs it with `python3 -c` on each machine that holds agents, through herdr-core. It needs `python3` and `hc` there, and for service links Linux (`ss` and `/proc`) plus, optionally, `git`, `docker` and `ddev`; it does not run on Windows. Links are offered for services on the app's own computer and, from an app on Windows, on a WSL machine, whose ports reach Windows as `localhost` (WSL's localhost forwarding). Services on other remote machines get no link: Herdr's machine name is not a hostname the browser can resolve. Model, effort and context need the statusline snapshot above.
 
 Install, with the app's home at `~/.config/herdr-app` (on Windows `%USERPROFILE%\.config\herdr-app`):
 

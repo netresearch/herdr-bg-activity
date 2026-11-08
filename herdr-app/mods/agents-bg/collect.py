@@ -180,7 +180,10 @@ def collect():
         except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
             # Gone since `hc ls`, or one read failed: skip it for this round.
             continue
-        found[address] = {k: v for k, v in info.items() if v not in (None, False)}
+        # `is not`: a context use of 0 is a value, while 0 == False.
+        found[address] = {
+            k: v for k, v in info.items() if v is not None and v is not False
+        }
     return found
 
 

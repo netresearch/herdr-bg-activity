@@ -17,6 +17,7 @@ function bgCount(bg) {
   return bg.replace("⧗", "").split(",").reduce((n, part) => n + (Number.parseInt(part.trim(), 10) || 0), 0);
 }
 
+// The same as agents-bg/bg.js's linkChips: a mod cannot import another mod's files.
 function linkChips(t, list, id) {
   return (list ?? []).map((l) =>
     div().id(`link-${id}-${l.key}`).flex_none().text_color(t.accent).cursor_pointer()

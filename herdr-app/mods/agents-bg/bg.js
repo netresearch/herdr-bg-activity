@@ -56,6 +56,7 @@ async function collectOn(script, machine, args) {
 export function startPolling(view, cx) {
   view.bgBusy = false;
   view.portsBusy = false;
+  view.portsFound = new Map(); // machine -> its last services
   cx.spawn(async (cx) => {
     view.bgScript = await readTextFile(`${appHome()}/mods/agents-bg/collect.py`);
     poll(view, cx);
@@ -72,8 +73,14 @@ function poll(view, cx) {
   cx.spawn(async () => {
     const results = await Promise.all(machines.map((m) => collectOn(view.bgScript, m, [])));
     const info = {};
+    const previous = shared(SHARED_KEY) ?? {};
     machines.forEach((machine, i) => {
-      for (const [addr, v] of Object.entries(results[i]?.terminals ?? {})) info[machine ? `${machine}/${addr}` : addr] = v;
+      if (!results[i]) {
+        // Failed this round: keep what it showed, rather than blank it for one poll.
+        for (const [addr, v] of Object.entries(previous)) if (machineOf(addr) === machine) info[addr] = v;
+        return;
+      }
+      for (const [addr, v] of Object.entries(results[i].terminals ?? {})) info[machine ? `${machine}/${addr}` : addr] = v;
     });
     view.bgBusy = false;
     publish(SHARED_KEY, info);
@@ -96,21 +103,26 @@ function pollPorts(view, cx) {
   view.portsBusy = true;
   cx.spawn(async () => {
     const results = await Promise.all(machines.map((m) => collectOn(view.bgScript, m, ["ports"])));
-    const found = [];
     machines.forEach((machine, i) => {
-      // A WSL machine's ports reach this Windows computer as localhost.
-      const host = machine === null || (results[i]?.wsl && onWindows()) ? "localhost" : machine;
-      for (const l of results[i]?.links ?? []) found.push({ ...l, machine, host });
+      // Failed this round: keep its last list, rather than blank its links for one poll.
+      if (!results[i]) return;
+      // Only this computer's services, and a WSL machine's behind a Windows app (they
+      // reach it as localhost), can be opened here. Another machine's name is no
+      // hostname this computer can resolve, so its services get no link.
+      const reachable = machine === null || (results[i].wsl && onWindows());
+      view.portsFound.set(machine, reachable ? (results[i].links ?? []).map((l) => ({ ...l, machine })) : []);
     });
+    for (const machine of view.portsFound.keys()) if (!machines.includes(machine)) view.portsFound.delete(machine);
     view.portsBusy = false;
-    publish(LINKS_KEY, place(found));
+    publish(LINKS_KEY, place([...view.portsFound.values()].flat()));
   });
 }
 
-// What this computer opens for a service, or null for another machine's loopback.
+// What this computer opens for a service: the DDEV URL, else localhost and the port.
+// Only http(s) URLs, so a link can never start another program.
 function urlOf(l) {
-  if (l.url) return l.url;
-  return l.host === "localhost" || !l.loopback ? `http://${l.host}:${l.port}` : null;
+  const url = l.url ?? `http://localhost:${l.port}`;
+  return /^https?:\/\//.test(url) ? url : null;
 }
 
 // The pane a service belongs to: the terminal it descends from, else a pane working

@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import tempfile
 import unittest
 from pathlib import Path
 from typing import ClassVar
@@ -150,6 +151,104 @@ class DockerAndDdevTest(unittest.TestCase):
             links = collect.ddev_links()
         self.assertEqual([link["label"] for link in links], ["shop"])
         self.assertEqual(links[0]["url"], "https://shop.ddev.site")
+
+
+SESSION = "672b42c5-e255-4a39-9129-597334c0da7c"
+
+
+class CollectTest(unittest.TestCase):
+    """collect() against a fake `hc`: which terminals are read, and what they show."""
+
+    TERMINALS: ClassVar[list] = [
+        {"address": "t2", "agent": "claude-code", "status": "done"},
+        {"address": "t3", "agent": "claude-code", "status": "working"},
+        {"address": "t4", "agent": "bash", "status": None},
+        {"address": "t5", "agent": "pi", "status": "idle"},
+    ]
+    SCREENS: ClassVar[dict] = {
+        "t2": f"x\n{RULE}\n❯\n{RULE}\n  ⏵⏵ on · 1 shell · ← 1 agent\n"
+        "◯ general-purpose  Reading …  18s · ↓ 140.1k tokens",
+        "t3": f"x\n{RULE}\n❯\n{RULE}\n  ⏵⏵ on · 1 monitor",
+        "t5": f"x\n{RULE}\n❯\n{RULE}\n  2 monitors",
+    }
+
+    def fake_hc(self, _binary, command, *args):
+        if command == "ls":
+            return {"terminals": self.TERMINALS}
+        if command == "read":
+            return {"text": self.SCREENS[args[0]]}
+        if command == "get":
+            return {"foreground": {"pid": 4242}}
+        raise AssertionError(command)
+
+    def run_collect(self, process, snapshot):
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshots, processes = Path(tmp, "snap"), Path(tmp, "proc")
+            snapshots.mkdir()
+            processes.mkdir()
+            if process is not None:
+                (processes / "4242.json").write_text(json.dumps(process))
+            if snapshot is not None:
+                (snapshots / f"{SESSION}.json").write_text(json.dumps(snapshot))
+            with (
+                mock.patch.object(collect, "hc", side_effect=self.fake_hc),
+                mock.patch.object(collect, "hc_binary", return_value="hc"),
+                mock.patch.object(collect, "alive", return_value=True),
+                mock.patch.object(
+                    collect, "session_dirs", return_value=(snapshots, processes)
+                ),
+            ):
+                return collect.collect()
+
+    def test_waiting_claude_with_snapshot_and_remote_control(self):
+        found = self.run_collect(
+            {"sessionId": SESSION, "bridgeSessionId": "b"},
+            {
+                "model": {"id": "claude-opus-5-5"},
+                "effort": {"level": "high"},
+                "context_window": {"used_percentage": 0},
+            },
+        )
+        self.assertEqual(
+            found["t2"],
+            {
+                "bg": "⧗ 1 shell",
+                "agents": 1,
+                "rc": True,
+                "model": "O55",
+                "effort": "high",
+                "ctx": 0,
+            },
+        )
+
+    def test_working_agent_shows_no_background_work(self):
+        found = self.run_collect({"sessionId": SESSION}, None)
+        self.assertNotIn("bg", found["t3"])
+        self.assertNotIn("rc", found["t3"])
+
+    def test_plain_terminal_is_skipped_and_other_agent_gets_background_only(self):
+        found = self.run_collect(None, None)
+        self.assertNotIn("t4", found)
+        self.assertEqual(found["t5"], {"bg": "⧗ 2 monitors"})
+
+    def test_session_id_that_is_no_uuid_reads_no_snapshot(self):
+        found = self.run_collect({"sessionId": "../../etc/passwd"}, None)
+        self.assertEqual(set(found["t2"]), {"bg", "agents"})
+
+
+class PlainTerminalTest(unittest.TestCase):
+    def test_server_in_a_plain_terminal_belongs_to_that_terminal(self):
+        tree = {40: ("node", 10), 10: ("bash", 1)}
+        out = ss_line("0.0.0.0:3000", "node", 40)
+        with (
+            mock.patch.object(collect, "run_json_lines", return_value=out),
+            mock.patch.object(collect, "proc_stat", side_effect=tree.get),
+            mock.patch.object(collect, "git_toplevel", return_value=""),
+            mock.patch.object(collect.os, "readlink", return_value="/p/web"),
+        ):
+            links = collect.process_links({10: "t4"}, {})
+        self.assertEqual(links[0]["terminal"], "t4")
+        self.assertEqual(links[0]["root"], "/p/web")
 
 
 if __name__ == "__main__":
