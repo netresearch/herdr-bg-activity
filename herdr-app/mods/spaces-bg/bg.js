@@ -1,6 +1,6 @@
-// Space annotation after netresearch/herdr-bg-activity: the symbols of the agents
-// in a space, how many background tasks they still own ("✻ ⧗ 1"), and links to the
-// services started in it (":5175", "contexts ↗"). The data comes from the shared keys
+// Space annotation after netresearch/herdr-bg-activity: links to the services
+// started in a space (":5175", "contexts ↗"), the symbols of its agents and how many
+// background tasks they still own ("✻ ⧗ 1"). The data comes from the shared keys
 // agents-bg publishes (see mods/agents-bg/bg.js).
 
 import { div } from "gpui-kit";
@@ -11,8 +11,11 @@ const SHARED_KEY = "bg-activity.info";
 const LINKS_KEY = "bg-activity.links";
 const SYMBOL = { claude: "✻", "claude-code": "✻", pi: "π" };
 
-// "⧗ 1 monitor, 2 shells" -> 3
-const bgCount = (bg) => (bg ? [...bg.matchAll(/(\d+) /g)].reduce((n, m) => n + Number(m[1]), 0) : 0);
+// "⧗ 1 monitor, 2 shells" -> 3: the leading number of each comma-separated part.
+function bgCount(bg) {
+  if (!bg) return 0;
+  return bg.replace("⧗", "").split(",").reduce((n, part) => n + (Number.parseInt(part.trim(), 10) || 0), 0);
+}
 
 function linkChips(t, list, id) {
   return (list ?? []).map((l) =>
@@ -27,7 +30,8 @@ export function spaceTail(t, spaceId) {
   const list = agents().filter((a) => a.space === spaceId);
   const info = shared(SHARED_KEY) ?? {};
   const links = shared(LINKS_KEY)?.bySpace?.[spaceId] ?? [];
-  const symbols = [...new Set(list.map((a) => SYMBOL[a.app] ?? SYMBOL[a.program?.key] ?? null).filter(Boolean))].sort();
+  const symbols = [...new Set(list.map((a) => SYMBOL[a.app] ?? SYMBOL[a.program?.key] ?? null).filter(Boolean))];
+  symbols.sort((a, b) => a.localeCompare(b));
   const count = list.reduce((n, a) => n + bgCount(info[a.address]?.bg), 0);
   if (!symbols.length && !count && !links.length) return null;
   return h_flex().flex_none().gap(5).items_center().text_size(11.5)

@@ -197,12 +197,16 @@ def collect():
 
 SHELLS = {"bash", "sh", "zsh", "fish", "dash", "ksh"}
 AGENT_PROGRAMS = {"claude", "codex", "opencode", "pi", "hermes", "herdr", "herdr-core"}
-OPENABLE = {"0.0.0.0", "*", "::", "[::]", "127.0.0.1", "::1", "[::1]"}
+LOOPBACK = {"127.0.0.1", "::1", "[::1]"}
+OPENABLE = {"0.0.0.0", "*", "::", "[::]", *LOOPBACK}
+EPHEMERAL_PORTS = 32768
+MAX_ANCESTRY = 64
 _SS_USER = re.compile(r'\("([^"]*)",pid=(\d+)')
 _DOCKER_PORT = re.compile(r"^(.*):(\d+)->(\d+)/tcp$")
 
 
 def proc_stat(pid):
+    """(comm, parent pid) of a process, or None once it is gone."""
     try:
         with open(f"/proc/{pid}/stat", "rb") as handle:
             raw = handle.read().decode("utf-8", "replace")
@@ -231,94 +235,108 @@ def git_toplevel(folder):
     return (out or "").strip()
 
 
-def process_links(roots, agents):
-    """roots: shell pid -> terminal address; agents: agent pid -> terminal address."""
-    out = run_json_lines("ss", "-ltnpH") or ""
-    links = []
-    seen = set()
-    for line in out.splitlines():
+def owner(pid, roots, agents):
+    """The terminal a process descends from: its address, None when it descends
+    from no terminal, or False for an agent's MCP server or helper.
+
+    Below any coding agent, also one outside herdr-core, the process right below
+    the agent decides: only a shell (Bash tool, background shell) is user work.
+    """
+    below, current = None, pid
+    for _ in range(MAX_ANCESTRY):
+        stat = proc_stat(current) if current > 1 else None
+        if not stat:
+            return None
+        if current in agents or stat[0] in AGENT_PROGRAMS:
+            shell = below is not None and (proc_stat(below) or ("",))[0] in SHELLS
+            return agents.get(current) if shell else False
+        if current in roots:
+            return roots[current]
+        below, current = current, stat[1]
+    return None
+
+
+def listeners():
+    """(host, port, program, pid) for each openable TCP listener of this user."""
+    for line in (run_json_lines("ss", "-ltnpH") or "").splitlines():
         cols = line.split()
         if len(cols) < 6:
             continue
         host, _, port = cols[3].rpartition(":")
-        if host not in OPENABLE or not port.isdigit() or int(port) >= 32768:
+        if host not in OPENABLE or not port.isdigit() or int(port) >= EPHEMERAL_PORTS:
             continue
         for name, pid in _SS_USER.findall(" ".join(cols[5:])):
-            pid = int(pid)
-            if (pid, port) in seen or name in AGENT_PROGRAMS:
-                continue
-            seen.add((pid, port))
-            terminal, below, current, chain = None, None, pid, 0
-            while current > 1 and chain < 64:
-                stat = proc_stat(current)
-                if not stat:
-                    break
-                # Any coding agent, also one outside herdr-core: the process right
-                # below it decides, and only a shell is user work.
-                if current in agents or stat[0] in AGENT_PROGRAMS:
-                    shell = (
-                        below is not None and (proc_stat(below) or ("",))[0] in SHELLS
-                    )
-                    terminal = agents.get(current) if shell else False
-                    break
-                if current in roots:
-                    terminal = roots[current]
-                    break
-                below, current, chain = current, stat[1], chain + 1
-            if terminal is False:
-                continue  # an agent's MCP server or helper
-            try:
-                cwd = os.readlink(f"/proc/{pid}/cwd")
-            except OSError:
-                cwd = None
-            git_root = git_toplevel(cwd) if cwd else ""
-            links.append(
-                {
-                    "kind": "process",
-                    "port": int(port),
-                    "loopback": host in {"127.0.0.1", "::1", "[::1]"},
-                    "label": name,
-                    "terminal": terminal,
-                    "cwd": cwd,
-                    # The project it serves: a pane must work inside it to claim it.
-                    "root": git_root or cwd,
-                }
-            )
+            yield host, int(port), name, int(pid)
+
+
+def process_links(roots, agents):
+    """roots: shell pid -> terminal address; agents: agent pid -> terminal address."""
+    links = []
+    seen = set()
+    for host, port, name, pid in listeners():
+        if (pid, port) in seen or name in AGENT_PROGRAMS:
+            continue
+        seen.add((pid, port))
+        terminal = owner(pid, roots, agents)
+        if terminal is False:
+            continue
+        try:
+            cwd = os.readlink(f"/proc/{pid}/cwd")
+        except OSError:
+            cwd = None
+        links.append(
+            {
+                "kind": "process",
+                "port": port,
+                "loopback": host in LOOPBACK,
+                "label": name,
+                "terminal": terminal,
+                "cwd": cwd,
+                # The project it serves: a pane must work inside it to claim it.
+                "root": (git_toplevel(cwd) if cwd else "") or cwd,
+            }
+        )
     return links
 
 
+def published_ports(spec_list):
+    """Host port -> bound to loopback only. IPv4 and IPv6 binds of one port are one."""
+    ports = {}
+    for spec in spec_list.split(","):
+        match = _DOCKER_PORT.match(spec.strip())
+        if match and match.group(1) in OPENABLE:
+            port = int(match.group(2))
+            ports[port] = ports.get(port, True) and match.group(1) in LOOPBACK
+    return ports
+
+
 def docker_links():
-    out = run_json_lines("docker", "ps", "--format", "{{json .}}")
     links = []
+    out = run_json_lines("docker", "ps", "--format", "{{json .}}")
     for line in (out or "").splitlines():
         try:
             box = json.loads(line)
         except ValueError:
             continue
-        labels = dict(
-            part.split("=", 1)
-            for part in box.get("Labels", "").split(",")
-            if "=" in part
-        )
+        labels = {
+            key: value
+            for key, sep, value in (
+                part.partition("=") for part in box.get("Labels", "").split(",")
+            )
+            if sep
+        }
         if "com.ddev.platform" in labels:
             continue
-        # Host port -> bound to loopback only; IPv4 and IPv6 binds of one port are one link.
-        ports = {}
-        for spec in box.get("Ports", "").split(","):
-            match = _DOCKER_PORT.match(spec.strip())
-            if match and match.group(1) in OPENABLE:
-                port = int(match.group(2))
-                loopback = match.group(1) in {"127.0.0.1", "::1", "[::1]"}
-                ports[port] = ports.get(port, True) and loopback
-        for port, loopback in sorted(ports.items()):
+        service = labels.get("com.docker.compose.service") or box.get("Names", "")
+        folder = labels.get("com.docker.compose.project.working_dir")
+        for port, loopback in sorted(published_ports(box.get("Ports", "")).items()):
             links.append(
                 {
                     "kind": "docker",
                     "port": port,
                     "loopback": loopback,
-                    "label": labels.get("com.docker.compose.service")
-                    or box.get("Names", ""),
-                    "cwd": labels.get("com.docker.compose.project.working_dir"),
+                    "label": service,
+                    "cwd": folder,
                 }
             )
     return links
